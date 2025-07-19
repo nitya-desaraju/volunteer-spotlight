@@ -1,6 +1,7 @@
 // This script is injected into the webpage and has access to the page's DOM and user session.
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    // debugger;
     if (request.action === "startScrape") {
         console.log("Content script received startScrape message. Starting full scrape with optimized multi-level logic...");
 
@@ -25,7 +26,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 let finalEventUrls = new Set();
                 let seeAllPagesToFetch = [];
                 
-                dayContainers = [dayContainers[6]];
+                dayContainers = [dayContainers[2], dayContainers[3]];
                 // Step 1: Iterate through each day container to decide the scraping strategy.
                 dayContainers.forEach(container => {
                     const seeAllLink = container.querySelector(seeAllEventsSelector);
@@ -47,7 +48,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 if (seeAllPagesToFetch.length > 0) {
                     const seeAllPromises = seeAllPagesToFetch.map(async (dayPageUrl) => {
                         try {
-                            const response = await fetch(dayPageUrl);
+                            const response = await fetch(dayPageUrl, {
+                                method: 'POST', 
+                                headers: {
+                                    'Content_Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                    'Accept': 'text/html, */*; q=0.01',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                }
+                            });
                             if (!response.ok) return;
 
                             const htmlText = await response.text();
@@ -71,6 +79,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 }
 
                 const uniqueEventUrls = Array.from(finalEventUrls);
+
+                //uniqueEventUrls = [uniqueEventUrls[2]];
                 if (uniqueEventUrls.length === 0) {
                     chrome.runtime.sendMessage({ action: "scrapingError", data: { error: "No events found after full scan. Check all CSS selectors in content.js." } });
                     return;
@@ -81,7 +91,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 // Step 3: Fetch details for every unique event URL gathered from all sources.
                 const detailPromises = uniqueEventUrls.map(async (url) => {
                     try {
-                        const response = await fetch(url);
+                        const response = await fetch(url, {
+                                method: 'GET', 
+                                headers: {
+                                    'Accept': 'text/html, */*; q=0.01',
+                                    'X-Requested-With': 'XMLHttpRequest'
+                                }
+                            });
                         if (!response.ok) {
                             return { url, title: 'Fetch Error', date: 'N/A', time: 'N/A', location: 'N/A', description: 'N/A' };
                         }
@@ -90,23 +106,82 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         const doc = parser.parseFromString(htmlText, 'text/html');
 
                         // --- CUSTOMIZE THIS SECTION (PART 3: Final Detail Page) ---
-                        const titleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2:first-child'; // Example selector
+                        const titleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2'; // Example selector
                         const detailTitleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2:nth-child(2)'; // Example selector
-                        const dateSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h3:first-child';
+                        const dateSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h3';
+                        const divSelector = 'div#SignupFromCalendarSignupToShiftDialogContent';
                         // const timeSelector = '.event-time-class';
                         // const locationSelector = '.event-location-class';
                         // const descriptionSelector = '.event-description-class';
                         // --- END CUSTOMIZATION ---
 
-                        const title = doc.querySelector(titleSelector)?.innerText.trim() || 'No Title Found';
-                        const detail = doc.querySelector(detailTitleSelector)?.innerText.trim() || 'No Detail Found';
-                        const date = doc.querySelector(dateSelector)?.innerText.trim() || 'N/A';
-                        // const time = doc.querySelector(timeSelector)?.innerText.trim() || 'N/A';
-                        // const location = doc.querySelector(locationSelector)?.innerText.trim() || 'N/A';
-                        // const description = doc.querySelector(descriptionSelector)?.innerText.trim() || 'N/A';
+                        const titleNode = doc.querySelector(titleSelector); // ?.innerText.trim() || 'No Title Found';
+                        let title = '';
 
-                        // return { url, title, date, time, location, description };
-                        return { url, title, detail, date };
+                        // Loop through all the direct children of the h2
+                        titleNode.childNodes.forEach(node => {
+                        // Find the text nodes (nodeType === 3)
+                        if (node.nodeType === 3) {
+                            // Add the text content of the node to our result
+                            title += node.textContent;
+                        }
+                        });
+
+                        // Use .trim() to remove all the extra whitespace from the beginning and end
+                        title = title.trim();                        
+
+                        const detail = doc.querySelector(detailTitleSelector)?.innerText.trim() || 'No Detail Found';
+                        const dateInput = doc.querySelector(dateSelector)?.innerText.trim() || 'N/A';
+                        // const time = doc.querySelector(timeSelector)?.innerText.trim() || 'N/A';
+                        
+                        // This regex looks for two main parts:
+                        // 1. ^(.+?)\s+ - Captures the date part from the start of the string until the last space before the time.
+                        // 2. (\d{1,2}:\d{2}.*)$ - Captures the time part, starting with a time-like pattern (e.g., 8:00) to the end of the string.
+                        const dateRegex = /^(.+?)\s+(\d{1,2}:\d{2}.*)$/;
+
+                        const dateMatches = dateInput.match(dateRegex);
+
+                        let dateString = "";
+                        let timeString = "";
+
+                        if (dateMatches && dateMatches.length > 2) {
+                            // The first captured group is the date
+                            dateString = dateMatches[1].trim();
+                        
+                            // The second captured group is the time
+                            timeString = dateMatches[2].trim();
+
+                            console.log("Date:", dateString); // Output: "Saturday, July 05, 2025"
+                            console.log("Time:", timeString); // Output: "8:00 AM - 10:00 AM"
+                        } else {
+                            console.log("Could not parse the string.");
+                        }
+
+                        const inputText = doc.querySelector(divSelector)?.innerText.trim() || 'N/A';
+                        const openingsRegex = /(\d+)\s+of\s+(\d+)/;
+                        // Use the match() method to find the pattern in the string
+                        const openingsMatches = inputText.match(openingsRegex);
+
+                        let openingsAvailable;
+                        let totalOpenings;
+                        // The 'matches' array will contain the results if the pattern is found
+                        if (openingsMatches) {
+                        // matches[0] is the full matched text: "1 of 7"
+                        // matches[1] is the first captured number: "1"
+                        // matches[2] is the second captured number: "7"
+                        // Convert the captured strings to numbers
+                            openingsAvailable = parseInt(openingsMatches[1], 10);
+                            totalOpenings = parseInt(openingsMatches[2], 10);
+
+                            console.log("Openings Available:", openingsAvailable); // Output: 1
+                            console.log("Total Openings:", totalOpenings);       // Output: 7
+                        } else {
+                            console.log("The specified pattern was not found in the string.");
+                        }
+
+                        const activityLink = doc.querySelector('div#SignupFromCalendarSignupToShiftDialogContent a#GoToActivityPageLink')?.href || 'N/A';
+                        
+                        return { activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings};
                     } catch (error) {
                         console.error(`Error processing detail page ${url}:`, error);
                         return { url, title: 'Processing Error', date: 'N/A', time: 'N/A', location: 'N/A', description: 'N/A' };

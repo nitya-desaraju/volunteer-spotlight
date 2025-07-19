@@ -98,14 +98,16 @@ function getAuthToken() {
 }
 
 function formatForGoogleSheets(detailedEvents) {
-    const header = ['Title', 'Date', 'Time', 'Location', 'Description', 'URL'];
+    //activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings
+    const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details'];
     const rows = detailedEvents.map(event => [
         event.title,
-        event.date,
-        event.time,
-        event.location,
-        event.description,
-        event.url
+        event.detail,
+        event.dateString,
+        event.timeString,
+        event.openingsAvailable,
+        event.totalOpenings,
+        event.activityLink
     ]);
     return [header, ...rows];
 }
