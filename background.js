@@ -99,7 +99,7 @@ function getAuthToken() {
 
 function formatForGoogleSheets(detailedEvents) {
     //activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings
-    const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details'];
+    const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level'];
     const rows = detailedEvents.map(event => [
         event.title,
         event.detail,
@@ -107,7 +107,8 @@ function formatForGoogleSheets(detailedEvents) {
         event.timeString,
         event.openingsAvailable,
         event.totalOpenings,
-        event.activityLink
+        event.activityLink,
+        event.pawNumber
     ]);
     return [header, ...rows];
 }

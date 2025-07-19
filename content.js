@@ -1,7 +1,7 @@
 // This script is injected into the webpage and has access to the page's DOM and user session.
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // debugger;
+    debugger;
     if (request.action === "startScrape") {
         console.log("Content script received startScrape message. Starting full scrape with optimized multi-level logic...");
 
@@ -26,7 +26,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 let finalEventUrls = new Set();
                 let seeAllPagesToFetch = [];
                 
-                dayContainers = [dayContainers[2], dayContainers[3]];
+                dayContainers = [dayContainers[6]];
                 // Step 1: Iterate through each day container to decide the scraping strategy.
                 dayContainers.forEach(container => {
                     const seeAllLink = container.querySelector(seeAllEventsSelector);
@@ -78,9 +78,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     await Promise.all(seeAllPromises);
                 }
 
-                const uniqueEventUrls = Array.from(finalEventUrls);
+                var uniqueEventUrls = Array.from(finalEventUrls);
 
-                //uniqueEventUrls = [uniqueEventUrls[2]];
+                uniqueEventUrls = [uniqueEventUrls[0]];
                 if (uniqueEventUrls.length === 0) {
                     chrome.runtime.sendMessage({ action: "scrapingError", data: { error: "No events found after full scan. Check all CSS selectors in content.js." } });
                     return;
@@ -110,6 +110,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         const detailTitleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2:nth-child(2)'; // Example selector
                         const dateSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h3';
                         const divSelector = 'div#SignupFromCalendarSignupToShiftDialogContent';
+                        
                         // const timeSelector = '.event-time-class';
                         // const locationSelector = '.event-location-class';
                         // const descriptionSelector = '.event-description-class';
@@ -179,9 +180,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             console.log("The specified pattern was not found in the string.");
                         }
 
+                        // --- NEW CODE: Extract number before "paw" ---
+                        let pawNumber = null;
+                        const pawRegex = /(\d+)\s*paw/i;
+                        const pawMatch = inputText.match(pawRegex);
+                        if (pawMatch) {
+                            pawNumber = parseInt(pawMatch[1], 10);
+                        }
+                        console.log("Number before 'paw':", pawNumber);
+                        // --- END NEW CODE ---
+
                         const activityLink = doc.querySelector('div#SignupFromCalendarSignupToShiftDialogContent a#GoToActivityPageLink')?.href || 'N/A';
                         
-                        return { activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings};
+                        return { activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings, pawNumber};
                     } catch (error) {
                         console.error(`Error processing detail page ${url}:`, error);
                         return { url, title: 'Processing Error', date: 'N/A', time: 'N/A', location: 'N/A', description: 'N/A' };

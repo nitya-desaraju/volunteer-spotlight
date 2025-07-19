@@ -97,6 +97,7 @@
                                 <th scope="col" class="px-6 py-3">Activity</th>
                                 <th scope="col" class="px-6 py-3">Date</th>
                                 <th scope="col" class="px-6 py-3 whitespace-nowrap">Time</th>
+                                <th scope="col" class="px-6 py-3 whitespace-nowrap">Paw Level</th>
                                 <th scope="col" class="px-6 py-3">Availability</th>
                                 <th scope="col" class="px-6 py-3">Details</th>
                             </tr>
@@ -260,16 +261,16 @@
                         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${event.activity}</th>
                         <td class="px-6 py-4">${event.eventDate.toLocaleDateString()}</td>
                         <td class="px-6 py-4 whitespace-nowrap">${event.time}</td>
+                        <td class="px-6 py-4">${event.pawlevel} Paw</td>
                         <td class="px-6 py-4">
                              <span class="font-semibold ${event.openShifts > 0 ? 'text-green-600' : 'text-red-600'}">
                                 ${event.openShifts} / ${event.totalShifts}
                             </span>
-                        </td>
-                        <td class="px-6 py-4">
+                         <td class="px-6 py-4">
                             <a href="${event.details}" target="_blank" rel="noopener noreferrer" class="font-medium text-indigo-600 hover:underline">Details</a>
                         </td>
                     </tr>
-                `).join('');
+                `).join('');               
             }
 
             function renderPagination(events, currentPage) {
