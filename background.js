@@ -18,21 +18,41 @@ async function uploadToSheet(events, spreadsheetId) {
         const token = await getAuthToken();
         updatePopupStatus("Authentication successful. Updating timestamp...");
 
+        // --- Standard Data Upload ---
         const timestamp = new Date().toLocaleString();
         await updateSheet(token, spreadsheetId, 'meta!A1', [['Last Updated:', timestamp]]);
         updatePopupStatus("Timestamp updated. Clearing old event data...");
-
         await clearGoogleSheet(token, spreadsheetId, 'data!A:Z');
         updatePopupStatus("Old data cleared. Writing new data to sheet...");
-
         const sheetData = formatForGoogleSheets(events);
         await appendToGoogleSheet(token, spreadsheetId, 'data!A1', sheetData);
-        
         chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
 
-        // NEW: Send unique categories to the popup for filtering
-        const categories = [...new Set(events.map(event => event.title))].sort();
-        chrome.runtime.sendMessage({ action: "showFilterOptions", data: { categories: categories, spreadsheetId: spreadsheetId } });
+        // --- NEW: Filter Validation Logic ---
+        const newCategories = [...new Set(events.map(event => event.title))].sort();
+        const newCategoriesSet = new Set(newCategories);
+        const { savedFilters } = await chrome.storage.local.get('savedFilters');
+        let filtersAreValid = true;
+
+        if (savedFilters && savedFilters.length > 0) {
+            // Check if every saved filter category still exists in the new data.
+            for (const savedCategory of savedFilters) {
+                if (!newCategoriesSet.has(savedCategory)) {
+                    filtersAreValid = false;
+                    break; // An outdated filter was found.
+                }
+            }
+        }
+
+        if (!filtersAreValid) {
+            updatePopupStatus("Outdated filters found, clearing them...");
+            await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z'); // Clear sheet
+            await chrome.storage.local.remove('savedFilters');          // Clear storage
+            updatePopupStatus("Filters cleared. Please set new filters if desired.");
+        }
+
+        // Finally, send the fresh list of categories to the popup.
+        chrome.runtime.sendMessage({ action: "showFilterOptions", data: { categories: newCategories, spreadsheetId: spreadsheetId } });
 
     } catch (error) {
         console.error("Background script error:", error);
@@ -57,7 +77,6 @@ async function applyFiltersToSheet(categories, spreadsheetId) {
     }
 }
 
-// GENERIC 'update' function for writing to a specific range
 async function updateSheet(token, spreadsheetId, range, values) {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueInputOption=USER_ENTERED`;
     const response = await fetch(url, {
