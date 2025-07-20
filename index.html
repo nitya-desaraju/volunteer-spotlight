@@ -89,7 +89,24 @@
         </section>
 
         <section>
-            <h2 class="text-2xl font-bold text-[#333333] mb-4">All Upcoming Shifts this Month</h2>
+            <div class="flex items-center gap-x-2 mb-4">
+                <h2 class="text-2xl font-bold text-[#333333]">All Upcoming Shifts this Month</h2>
+                <div id="filter-info-tooltip-container" class="relative hidden">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-500 cursor-pointer hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div id="filter-info-tooltip" class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 bg-[#333333] text-white text-sm rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity duration-300 z-10">
+                        <p id="filter-tooltip-content"></p>
+                        <p class="mt-2">
+                            <a href="https://app.betterimpact.com/Login/LoginNoSearch/?agencyGuid=4635a5e6-5612-40b5-8329-1bccba8a9dbb" target="_blank" rel="noopener noreferrer" class="text-blue-300 hover:underline font-semibold">Log in</a> to see all available shifts.
+                        </p>
+                        <div class="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-[#333333]"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="text-xs text-gray-500 -mt-2 mb-3">
+                <p>&#x2190; Scroll table horizontally to see all details &#x2192;</p>
+            </div>
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left text-[#454545]">
@@ -121,7 +138,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- CONFIGURATION ---
             const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing';
-            const ROWS_PER_PAGE = 15; // Changed from 10 to 15
+            const ROWS_PER_PAGE = 15;
             const PAW_ICON_URL = 'images/paw.png';
             const EVENT_SHEET_NAME = 'data';
             const META_SHEET_NAME = 'meta';
@@ -178,14 +195,14 @@
                 try {
                     const filterCsvUrl = getCsvUrl(GOOGLE_SHEET_URL, FILTER_SHEET_NAME);
                     const response = await fetch(filterCsvUrl);
-                    if (!response.ok) return []; // No filters set is not an error
+                    if (!response.ok) return [];
                     const csvText = await response.text();
                     return csvText.split('\n')
                         .filter(row => row.trim() !== '')
                         .map(row => row.trim().slice(1, -1));
                 } catch (error) {
                     console.error('Could not fetch filters:', error);
-                    return []; // On error, return no filters
+                    return [];
                 }
             }
             
@@ -247,10 +264,17 @@
 
                 renderHighlightedEvents(allProcessedEvents, today);
 
+                const filterTooltipContent = document.getElementById('filter-tooltip-content');
+                const filterTooltipContainer = document.getElementById('filter-info-tooltip-container');
                 let filteredForTable = allProcessedEvents;
+                
                 if (activeFilters && activeFilters.length > 0) {
                     const filterSet = new Set(activeFilters);
                     filteredForTable = allProcessedEvents.filter(event => filterSet.has(event.category));
+                    filterTooltipContent.innerHTML = `<strong>Featured Categories:</strong> ${activeFilters.join(', ')}`;
+                    filterTooltipContainer.classList.remove('hidden');
+                } else {
+                    filterTooltipContainer.classList.add('hidden');
                 }
 
                 paginatedEvents = filteredForTable;
@@ -321,7 +345,6 @@
                 `).join('');               
             }
 
-            // NEW: Rewritten pagination function for better UI with many pages
             function renderPagination(events, currentPage) {
                 const paginationContainer = document.getElementById('pagination-controls');
                 paginationContainer.innerHTML = '';
@@ -345,28 +368,23 @@
                     return span;
                 };
 
-                // Previous Button
                 paginationContainer.appendChild(createButton('&lsaquo; Prev', currentPage - 1, currentPage === 1));
 
                 const pageNumbers = new Set();
-                pageNumbers.add(1); // Always show the first page
+                pageNumbers.add(1);
 
-                // Add pages around the current page
                 for (let i = -1; i <= 1; i++) {
                     const page = currentPage + i;
                     if (page > 1 && page < totalPages) {
                         pageNumbers.add(page);
                     }
                 }
+                pageNumbers.add(totalPages);
 
-                pageNumbers.add(totalPages); // Always show the last page
-
-                // Convert set to a sorted array to handle adding ellipses correctly
                 const sortedPages = Array.from(pageNumbers).sort((a, b) => a - b);
                 
                 let lastPage = 0;
                 for (const page of sortedPages) {
-                    // Add an ellipsis if there's a gap between page numbers
                     if (lastPage > 0 && page - lastPage > 1) {
                         paginationContainer.appendChild(createEllipsis());
                     }
@@ -374,14 +392,18 @@
                     lastPage = page;
                 }
 
-                // Next Button
                 paginationContainer.appendChild(createButton('Next &rsaquo;', currentPage + 1, currentPage === totalPages));
             }
             
-            const tooltipContainer = document.getElementById('info-tooltip-container');
-            const tooltip = document.getElementById('info-tooltip');
-            tooltipContainer.addEventListener('mouseenter', () => tooltip.classList.remove('opacity-0', 'pointer-events-none'));
-            tooltipContainer.addEventListener('mouseleave', () => tooltip.classList.add('opacity-0', 'pointer-events-none'));
+            const urgentTooltipContainer = document.getElementById('info-tooltip-container');
+            const urgentTooltip = document.getElementById('info-tooltip');
+            urgentTooltipContainer.addEventListener('mouseenter', () => urgentTooltip.classList.remove('opacity-0', 'pointer-events-none'));
+            urgentTooltipContainer.addEventListener('mouseleave', () => urgentTooltip.classList.add('opacity-0', 'pointer-events-none'));
+
+            const filterTooltipContainer = document.getElementById('filter-info-tooltip-container');
+            const filterTooltip = document.getElementById('filter-info-tooltip');
+            filterTooltipContainer.addEventListener('mouseenter', () => filterTooltip.classList.remove('opacity-0', 'pointer-events-none'));
+            filterTooltipContainer.addEventListener('mouseleave', () => filterTooltip.classList.add('opacity-0', 'pointer-events-none'));
 
             // --- INITIALIZATION ---
             fetchAndUpdateTimestamp();
