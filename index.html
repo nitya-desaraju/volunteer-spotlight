@@ -121,7 +121,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- CONFIGURATION ---
             const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing';
-            const ROWS_PER_PAGE = 10;
+            const ROWS_PER_PAGE = 15; // Changed from 10 to 15
             const PAW_ICON_URL = 'images/paw.png';
             const EVENT_SHEET_NAME = 'data';
             const META_SHEET_NAME = 'meta';
@@ -232,7 +232,6 @@
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
-                // 1. Process all events and sort them.
                 const allProcessedEvents = events.map(e => {
                     const eventDate = new Date(e.date);
                     const openShifts = parseInt(e.openshifts, 10) || 0;
@@ -246,17 +245,14 @@
                     return convertTimeTo24Hour(a.time) - convertTimeTo24Hour(b.time);
                 });
 
-                // 2. Render the "Urgent" section using the full, unfiltered list of events.
                 renderHighlightedEvents(allProcessedEvents, today);
 
-                // 3. Now, apply category filters to create the list for the main table.
                 let filteredForTable = allProcessedEvents;
                 if (activeFilters && activeFilters.length > 0) {
                     const filterSet = new Set(activeFilters);
                     filteredForTable = allProcessedEvents.filter(event => filterSet.has(event.category));
                 }
 
-                // 4. Use the filtered list for pagination and the main table display.
                 paginatedEvents = filteredForTable;
                 displayPage(1);
                 loader.classList.add('hidden');
@@ -325,33 +321,61 @@
                 `).join('');               
             }
 
+            // NEW: Rewritten pagination function for better UI with many pages
             function renderPagination(events, currentPage) {
                 const paginationContainer = document.getElementById('pagination-controls');
                 paginationContainer.innerHTML = '';
-                const pageCount = Math.ceil(events.length / ROWS_PER_PAGE);
-                if (pageCount <= 1) return;
+                const totalPages = Math.ceil(events.length / ROWS_PER_PAGE);
 
-                const prevButton = document.createElement('button');
-                prevButton.innerHTML = '&laquo; Prev';
-                prevButton.className = 'pagination-btn px-4 py-2 text-sm font-medium text-[#333333] bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed';
-                prevButton.disabled = currentPage === 1;
-                prevButton.addEventListener('click', () => displayPage(currentPage - 1));
-                paginationContainer.appendChild(prevButton);
+                if (totalPages <= 1) return;
 
-                for (let i = 1; i <= pageCount; i++) {
-                    const pageButton = document.createElement('button');
-                    pageButton.innerText = i;
-                    pageButton.className = `pagination-btn px-4 py-2 text-sm font-medium text-[#333333] bg-white border border-gray-300 rounded-md hover:bg-gray-100 ${i === currentPage ? 'active' : ''}`;
-                    pageButton.addEventListener('click', () => displayPage(i));
-                    paginationContainer.appendChild(pageButton);
+                const createButton = (text, page, isDisabled = false, isActive = false) => {
+                    const button = document.createElement('button');
+                    button.innerHTML = text;
+                    button.disabled = isDisabled;
+                    button.className = `pagination-btn px-3 py-1 text-sm font-medium text-[#333333] bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed ${isActive ? 'active' : ''}`;
+                    button.addEventListener('click', () => displayPage(page));
+                    return button;
+                };
+
+                const createEllipsis = () => {
+                    const span = document.createElement('span');
+                    span.textContent = '...';
+                    span.className = 'px-3 py-1 text-sm font-medium text-gray-500';
+                    return span;
+                };
+
+                // Previous Button
+                paginationContainer.appendChild(createButton('&lsaquo; Prev', currentPage - 1, currentPage === 1));
+
+                const pageNumbers = new Set();
+                pageNumbers.add(1); // Always show the first page
+
+                // Add pages around the current page
+                for (let i = -1; i <= 1; i++) {
+                    const page = currentPage + i;
+                    if (page > 1 && page < totalPages) {
+                        pageNumbers.add(page);
+                    }
                 }
 
-                const nextButton = document.createElement('button');
-                nextButton.innerHTML = 'Next &raquo;';
-                nextButton.className = 'pagination-btn px-4 py-2 text-sm font-medium text-[#333333] bg-white border border-gray-300 rounded-md hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed';
-                nextButton.disabled = currentPage === pageCount;
-                nextButton.addEventListener('click', () => displayPage(currentPage + 1));
-                paginationContainer.appendChild(nextButton);
+                pageNumbers.add(totalPages); // Always show the last page
+
+                // Convert set to a sorted array to handle adding ellipses correctly
+                const sortedPages = Array.from(pageNumbers).sort((a, b) => a - b);
+                
+                let lastPage = 0;
+                for (const page of sortedPages) {
+                    // Add an ellipsis if there's a gap between page numbers
+                    if (lastPage > 0 && page - lastPage > 1) {
+                        paginationContainer.appendChild(createEllipsis());
+                    }
+                    paginationContainer.appendChild(createButton(page, page, false, page === currentPage));
+                    lastPage = page;
+                }
+
+                // Next Button
+                paginationContainer.appendChild(createButton('Next &rsaquo;', currentPage + 1, currentPage === totalPages));
             }
             
             const tooltipContainer = document.getElementById('info-tooltip-container');
