@@ -132,7 +132,18 @@
     
     <footer class="bg-[#636466] text-white text-center py-3 text-sm mt-12">
         <p>Developed by Nitya Desaraju</p>
+        <button id="how-it-works-btn" class="mt-1 text-xs text-gray-300 hover:text-white hover:underline focus:outline-none">How this works</button>
     </footer>
+
+    <div id="how-it-works-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 relative max-h-full overflow-y-auto">
+            <button id="close-modal-btn" class="absolute top-3 right-4 text-[#aa1f36] hover:text-[#86192a] text-3xl font-bold transition-colors">&times;</button>
+            <h2 class="text-2xl font-bold text-[#333333] mb-4">How This Works</h2>
+            <div class="space-y-3 text-[#454545] text-base">
+                <p>This website was developed in two parts: a chrome extension that pulls data off of an internal volunteer management tool, and this page that displays the data.</p>
+            </div>
+        </div>
+    </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
@@ -395,6 +406,7 @@
                 paginationContainer.appendChild(createButton('Next &rsaquo;', currentPage + 1, currentPage === totalPages));
             }
             
+            // --- Event Listeners ---
             const urgentTooltipContainer = document.getElementById('info-tooltip-container');
             const urgentTooltip = document.getElementById('info-tooltip');
             urgentTooltipContainer.addEventListener('mouseenter', () => urgentTooltip.classList.remove('opacity-0', 'pointer-events-none'));
@@ -404,6 +416,19 @@
             const filterTooltip = document.getElementById('filter-info-tooltip');
             filterTooltipContainer.addEventListener('mouseenter', () => filterTooltip.classList.remove('opacity-0', 'pointer-events-none'));
             filterTooltipContainer.addEventListener('mouseleave', () => filterTooltip.classList.add('opacity-0', 'pointer-events-none'));
+
+            const howItWorksBtn = document.getElementById('how-it-works-btn');
+            const modal = document.getElementById('how-it-works-modal');
+            const closeModalBtn = document.getElementById('close-modal-btn');
+            const openModal = () => modal.classList.replace('hidden', 'flex');
+            const closeModal = () => modal.classList.replace('flex', 'hidden');
+            howItWorksBtn.addEventListener('click', openModal);
+            closeModalBtn.addEventListener('click', closeModal);
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal) {
+                    closeModal();
+                }
+            });
 
             // --- INITIALIZATION ---
             fetchAndUpdateTimestamp();
