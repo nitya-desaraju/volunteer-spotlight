@@ -266,7 +266,7 @@
                     const totalShifts = parseInt(e.totalshifts, 10) || 0;
                     const fillRate = totalShifts > 0 ? (totalShifts - openShifts) / totalShifts : 1;
                     return { ...e, eventDate, openShifts, totalShifts, fillRate };
-                }).filter(e => e.eventDate >= today && !isNaN(e.eventDate.getTime()))
+                }).filter(e => e.eventDate >= today && !isNaN(e.eventDate.getTime()) && e.openShifts > 0)
                   .sort((a, b) => {
                     const dateComparison = a.eventDate.getTime() - b.eventDate.getTime();
                     if (dateComparison !== 0) return dateComparison;
