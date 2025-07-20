@@ -65,7 +65,7 @@
     <main class="container mx-auto p-4 md:p-8 space-y-12">
         <header class="text-center">
             <h1 class="text-4xl md:text-5xl font-bold text-[#333333]">Volunteer Shift Spotlight</h1>
-            <p class="mt-2 text-[#454545] max-w-2xl mx-auto">An overview of upcoming events, highlighting opportunities with the most availability.</p>
+            <p id="last-updated-subtitle" class="mt-2 text-[#454545] max-w-2xl mx-auto">An overview of upcoming events, highlighting opportunities with the most availability.</p>
             
             <a href="https://app.betterimpact.com/Login/LoginNoSearch/?agencyGuid=4635a5e6-5612-40b5-8329-1bccba8a9dbb" target="_blank" rel="noopener noreferrer" class="inline-block mt-6 bg-[#aa1f36] text-white font-bold py-3 px-8 rounded-lg hover:bg-[#86192a] transition-colors">
                 Volunteer Login
@@ -127,6 +127,8 @@
             const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing'; // Example public sheet
             const ROWS_PER_PAGE = 10;
             const PAW_ICON_URL = 'images/paw.png'; // Using local path
+            const EVENT_SHEET_NAME = 'data';
+            const META_SHEET_NAME = 'meta';
 
             let currentPage = 1;
             let paginatedEvents = [];
@@ -144,35 +146,67 @@
             }
 
             // --- DATA FETCHING & PARSING ---
-            function getCsvUrl(sheetUrl) {
+            function getCsvUrl(sheetUrl, sheetName) {
                 const sheetId = sheetUrl.split('/d/')[1].split('/')[0];
-                return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv`;
+                return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
             }
 
-            async function fetchData() {
+            async function fetchAndUpdateTimestamp() {
                 try {
-                    const csvUrl = getCsvUrl(GOOGLE_SHEET_URL);
+                    const metaCsvUrl = getCsvUrl(GOOGLE_SHEET_URL, META_SHEET_NAME);
+                    const response = await fetch(metaCsvUrl);
+                    if (!response.ok) return; // Fail silently if meta sheet is not found
+                    const csvText = await response.text();
+
+                    if (csvText) {
+                        const parts = csvText.trim().slice(1, -1).split('","');
+                        if (parts.length > 1 && parts[0] === 'Last Updated:') {
+                            const timestamp = parts[1];
+                            document.getElementById('last-updated-subtitle').textContent = `Last updated: ${timestamp}`;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Could not fetch timestamp:', error);
+                }
+            }
+
+            async function fetchEventData() {
+                try {
+                    const csvUrl = getCsvUrl(GOOGLE_SHEET_URL, EVENT_SHEET_NAME);
                     const response = await fetch(csvUrl);
                     if (!response.ok) throw new Error('Network response was not ok.');
                     const csvText = await response.text();
                     return parseCSV(csvText);
                 } catch (error) {
-                    console.error('Failed to fetch or parse sheet data:', error);
-                    loader.innerHTML = '<p class="text-red-500">Failed to load data. Please check the Google Sheet URL and sharing permissions.</p>';
+                    console.error('Failed to fetch or parse event data:', error);
+                    loader.innerHTML = '<p class="text-red-500">Failed to load event data. Please check the Google Sheet URL and sharing permissions.</p>';
                     return [];
                 }
             }
 
             function parseCSV(text) {
                 const rows = text.split('\n').map(row => row.trim().slice(1, -1).split('","'));
+
+                // Handle the timestamp from the first row
+                if (rows.length > 0 && rows[0][0] === 'Last Updated:') {
+                    const timestamp = rows[0][1];
+                    const subtitle = document.getElementById('last-updated-subtitle');
+                    if (subtitle && timestamp) {
+                        subtitle.textContent = `Last updated: ${timestamp}`;
+                    }
+                    rows.shift(); // Remove timestamp row
+                }
+
                 const headers = rows.shift();
                 return rows.map(row => {
                     const event = {};
-                    headers.forEach((header, i) => {
-                        event[header.toLowerCase().replace(/\s+/g, '')] = row[i] || '';
-                    });
+                    if(headers) {
+                        headers.forEach((header, i) => {
+                            event[header.toLowerCase().replace(/\s+/g, '')] = row[i] || '';
+                        });
+                    }
                     return event;
-                });
+                }).filter(e => e.category); // Filter out any potentially empty rows
             }
             
             function convertTimeTo24Hour(timeString) {
@@ -333,7 +367,9 @@
                 tooltip.classList.add('opacity-0', 'pointer-events-none');
             });
 
-            fetchData().then(processAndRender);
+            // Start the process: fetch timestamp first, then fetch and render event data.
+            fetchAndUpdateTimestamp();
+            fetchEventData().then(processAndRender);
         });
     </script>
 </body>
