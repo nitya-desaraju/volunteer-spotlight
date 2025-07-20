@@ -51,6 +51,9 @@ applyFiltersButton.addEventListener('click', () => {
         selectedCategories.push(checkbox.value);
     });
 
+    // Save the selected filters to local storage
+    chrome.storage.local.set({ savedFilters: selectedCategories });
+
     const sheetUrl = sheetUrlInput.value;
     const spreadsheetId = sheetUrl.split('/d/')[1].split('/')[0];
     
@@ -68,7 +71,7 @@ applyFiltersButton.addEventListener('click', () => {
 });
 
 // Listen for messages from other parts of the extension
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.action === "updateStatus") {
         updateStatus(message.data);
     } else if (message.action === "scrapingComplete") {
@@ -80,6 +83,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         startButton.disabled = false;
         updateStatus(`❌ Error: ${message.data.error}`);
     } else if (message.action === "showFilterOptions") {
+        // Load previously saved filters from storage
+        const { savedFilters } = await chrome.storage.local.get('savedFilters');
+        const savedFilterSet = new Set(savedFilters || []);
+
         categoryListDiv.innerHTML = ''; // Clear old categories
         message.data.categories.forEach(category => {
             const wrapper = document.createElement('div');
@@ -89,6 +96,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             checkbox.id = category;
             checkbox.value = category;
             checkbox.className = 'h-4 w-4 rounded border-gray-300 text-[#aa1f36] focus:ring-[#aa1f36]';
+            
+            // Check the box if this category was in the saved set
+            if (savedFilterSet.has(category)) {
+                checkbox.checked = true;
+            }
             
             const label = document.createElement('label');
             label.htmlFor = category;
