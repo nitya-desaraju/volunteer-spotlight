@@ -3,9 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Event Spotlight Page</title>
+    <title>Volunteer Shift Spotlight</title>
+    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts for a modern look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -48,17 +51,30 @@
 </head>
 <body>
 
+    <header class="bg-white p-4 shadow-md">
+        <div class="container mx-auto flex justify-center">
+            <img src="https://www.operationkindness.org/wp-content/uploads/operation-kindness-logo-north-texas-no-kill-animal-shelter-trademark.png" alt="Operation Kindness Logo" class="h-16 md:h-20 w-auto">
+        </div>
+    </header>
+
     <div id="loader" class="fixed inset-0 bg-white/80 backdrop-blur-sm flex flex-col justify-center items-center z-50">
         <div class="w-16 h-16 border-4 border-t-4 border-t-indigo-600 border-gray-200 rounded-full animate-spin"></div>
         <p class="mt-4 text-gray-600">Fetching event data...</p>
     </div>
 
     <main class="container mx-auto p-4 md:p-8 space-y-12">
+        <!-- Header Section -->
         <header class="text-center">
-            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Event Spotlight</h1>
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Volunteer Shift Spotlight</h1>
             <p class="mt-2 text-gray-600 max-w-2xl mx-auto">An overview of upcoming events, highlighting opportunities with the most availability.</p>
+            
+            <!-- BUTTON COLOR CHANGED HERE -->
+            <a href="https://app.betterimpact.com/Login/LoginNoSearch/?agencyGuid=4635a5e6-5612-40b5-8329-1bccba8a9dbb" target="_blank" rel="noopener noreferrer" class="inline-block mt-6 bg-[#aa1f36] text-white font-bold py-3 px-8 rounded-lg hover:bg-[#86192a] transition-colors">
+                Volunteer Login
+            </a>
         </header>
 
+        <!-- Highlighted Events Section -->
         <section>
             <div class="flex items-center gap-x-2 mb-4">
                 <h2 class="text-2xl font-bold text-gray-700">Urgent & Available: Next 7 Days</h2>
@@ -73,14 +89,16 @@
                 </div>
             </div>
             <div id="highlighted-events" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                </div>
+                <!-- Highlighted event cards will be injected here by JavaScript -->
+            </div>
              <div id="no-highlighted-events" class="hidden text-center p-8 bg-white rounded-lg shadow-md">
-                <p class="text-gray-500">No high-priority events with many openings for today or tomorrow.</p>
+                <p class="text-gray-500">No high-priority events with many openings in the next 7 days.</p>
             </div>
         </section>
 
+        <!-- All Events Table Section -->
         <section>
-            <h2 class="text-2xl font-bold text-gray-700 mb-4">All Events this Month</h2>
+            <h2 class="text-2xl font-bold text-gray-700 mb-4">All Upcoming Shifts</h2>
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left text-gray-500">
@@ -96,9 +114,11 @@
                             </tr>
                         </thead>
                         <tbody id="all-events-table">
-                            </tbody>
+                            <!-- All event rows will be injected here by JavaScript -->
+                        </tbody>
                     </table>
                 </div>
+                <!-- Pagination Controls -->
                 <div id="pagination-controls" class="flex justify-center items-center p-4 space-x-2"></div>
             </div>
         </section>
@@ -117,16 +137,10 @@
             const loader = document.getElementById('loader');
 
             // --- HELPER FUNCTION ---
-            /**
-             * Generates a string of HTML img tags for paw icons.
-             * @param {string | number} level The paw level.
-             * @returns {string} The HTML string of paw icons.
-             */
             function generatePawIcons(level) {
                 const pawLevel = parseInt(level, 10) || 0;
                 if (pawLevel === 0) return '0 Paw';
                 
-                // Creates an array of image tags and joins them into a single string
                 return Array.from({ length: pawLevel }, () => 
                     `<img src="${PAW_ICON_URL}" alt="Paw icon" class="w-5 h-5 inline-block mx-px">`
                 ).join('');
@@ -197,7 +211,6 @@
                     return { ...e, eventDate, openShifts, totalShifts, fillRate };
                 }).filter(e => e.eventDate >= today && !isNaN(e.eventDate.getTime()));
 
-                // Sort all events first by date, then by time
                 processedEvents.sort((a, b) => {
                     const dateComparison = a.eventDate.getTime() - b.eventDate.getTime();
                     if (dateComparison !== 0) return dateComparison;
@@ -206,9 +219,9 @@
 
                 renderHighlightedEvents(processedEvents, today);
                 
-                paginatedEvents = processedEvents; // Use all future events for the table
+                paginatedEvents = processedEvents;
 
-                displayPage(1); // Display the first page initially
+                displayPage(1);
                 loader.classList.add('hidden');
             }
 
@@ -222,7 +235,6 @@
                 const highlightedContainer = document.getElementById('highlighted-events');
                 const noEventsMessage = document.getElementById('no-highlighted-events');
                 
-                // --- LOGIC MODIFIED HERE ---
                 const sevenDaysFromNow = new Date(today);
                 sevenDaysFromNow.setDate(today.getDate() + 7);
 
@@ -257,7 +269,7 @@
 
             function renderAllEventsTable(events, page) {
                 const tableBody = document.getElementById('all-events-table');
-                tableBody.innerHTML = ''; // Clear previous rows
+                tableBody.innerHTML = '';
 
                 const start = (page - 1) * ROWS_PER_PAGE;
                 const end = start + ROWS_PER_PAGE;
@@ -290,7 +302,6 @@
                 const pageCount = Math.ceil(events.length / ROWS_PER_PAGE);
                 if (pageCount <= 1) return;
 
-                // Previous Button
                 const prevButton = document.createElement('button');
                 prevButton.innerHTML = '&laquo; Prev';
                 prevButton.className = 'pagination-btn px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -298,7 +309,6 @@
                 prevButton.addEventListener('click', () => displayPage(currentPage - 1));
                 paginationContainer.appendChild(prevButton);
 
-                // Page Number Buttons (simplified for brevity)
                 for (let i = 1; i <= pageCount; i++) {
                     const pageButton = document.createElement('button');
                     pageButton.innerText = i;
@@ -307,7 +317,6 @@
                     paginationContainer.appendChild(pageButton);
                 }
 
-                // Next Button
                 const nextButton = document.createElement('button');
                 nextButton.innerHTML = 'Next &raquo;';
                 nextButton.className = 'pagination-btn px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
@@ -316,7 +325,6 @@
                 paginationContainer.appendChild(nextButton);
             }
             
-            // --- EVENT LISTENERS ---
             const tooltipContainer = document.getElementById('info-tooltip-container');
             const tooltip = document.getElementById('info-tooltip');
 
@@ -328,7 +336,6 @@
                 tooltip.classList.add('opacity-0', 'pointer-events-none');
             });
 
-            // --- INITIALIZE ---
             fetchData().then(processAndRender);
         });
     </script>
