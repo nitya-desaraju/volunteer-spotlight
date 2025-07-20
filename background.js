@@ -1,37 +1,38 @@
 // This script runs in the background and now only handles API calls to Google Sheets.
 
-// Listen for the "processEvents" message from the content script.
-// This message now contains the *final, fully processed* event data.
+// Listen for messages from other parts of the extension
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "processEvents") {
-        // The data is already processed, so we just need to upload it.
         uploadToSheet(request.data.events, request.data.spreadsheetId);
-        return true; // Indicates that the response will be sent asynchronously.
+        return true; 
+    }
+    if (request.action === "applyFilters") {
+        applyFiltersToSheet(request.data.selectedCategories, request.data.spreadsheetId);
+        return true;
     }
 });
 
 async function uploadToSheet(events, spreadsheetId) {
     updatePopupStatus(`Received ${events.length} processed events. Authenticating with Google...`);
     try {
-        // Get Google Auth token.
         const token = await getAuthToken();
         updatePopupStatus("Authentication successful. Updating timestamp...");
 
-        // 1. Write the current timestamp to the 'meta' sheet.
         const timestamp = new Date().toLocaleString();
-        await updateTimestamp(token, spreadsheetId, timestamp);
+        await updateSheet(token, spreadsheetId, 'meta!A1', [['Last Updated:', timestamp]]);
         updatePopupStatus("Timestamp updated. Clearing old event data...");
 
-        // 2. Clear all data from the main sheet.
-        await clearGoogleSheet(token, spreadsheetId);
+        await clearGoogleSheet(token, spreadsheetId, 'data!A:Z');
         updatePopupStatus("Old data cleared. Writing new data to sheet...");
 
-        // 3. Prepare and write the new event data to the main sheet.
         const sheetData = formatForGoogleSheets(events);
-        await appendToGoogleSheet(token, spreadsheetId, sheetData);
-
-        // Send completion message to popup.
+        await appendToGoogleSheet(token, spreadsheetId, 'data!A1', sheetData);
+        
         chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
+
+        // NEW: Send unique categories to the popup for filtering
+        const categories = [...new Set(events.map(event => event.title))].sort();
+        chrome.runtime.sendMessage({ action: "showFilterOptions", data: { categories: categories, spreadsheetId: spreadsheetId } });
 
     } catch (error) {
         console.error("Background script error:", error);
@@ -39,52 +40,47 @@ async function uploadToSheet(events, spreadsheetId) {
     }
 }
 
-// NEW FUNCTION: Writes a timestamp to a separate 'meta' sheet.
-async function updateTimestamp(token, spreadsheetId, timestamp) {
-    const range = 'meta!A1';
+async function applyFiltersToSheet(categories, spreadsheetId) {
+    try {
+        const token = await getAuthToken();
+        await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z');
+        
+        if (categories.length > 0) {
+            const values = categories.map(category => [category]); // Format for sheet API
+            await appendToGoogleSheet(token, spreadsheetId, 'filter!A1', values);
+        }
+        
+        chrome.runtime.sendMessage({ action: "filtersApplied" });
+    } catch (error) {
+        console.error("Filter apply error:", error);
+        chrome.runtime.sendMessage({ action: "scrapingError", data: { error: `Failed to apply filters: ${error.message}` } });
+    }
+}
+
+// GENERIC 'update' function for writing to a specific range
+async function updateSheet(token, spreadsheetId, range, values) {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueInputOption=USER_ENTERED`;
-
     const response = await fetch(url, {
-        method: 'PUT', // Use PUT to update a specific range
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            values: [
-                ["Last Updated:", timestamp]
-            ]
-        })
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: values })
     });
-
     if (!response.ok) {
         const errorData = await response.json();
-        // This error will likely appear if the 'meta' sheet doesn't exist.
-        console.error(`Could not write timestamp (is there a sheet named 'meta'?): ${errorData.error.message}`);
-        updatePopupStatus(`Warning: Could not write timestamp. Please ensure a sheet named 'meta' exists.`);
+        console.error(`Sheet update error for range ${range}: ${errorData.error.message}`);
+        updatePopupStatus(`Warning: Could not write to ${range}.`);
     }
-
     return response.json();
 }
 
-
-// Clears all values from the primary sheet.
-async function clearGoogleSheet(token, spreadsheetId) {
-    const range = 'data!A:Z'; // Clear all columns in the first sheet.
+async function clearGoogleSheet(token, spreadsheetId, range) {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}:clear`;
-
     const response = await fetch(url, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        }
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
     });
-
     if (!response.ok) {
         const errorData = await response.json();
-        // It's okay if the sheet is already empty (which gives a 400 error).
-        // We also ignore a 404 error in case the sheet doesn't exist yet.
         if (errorData.error.code !== 400 && errorData.error.code !== 404) {
            throw new Error(`Google Sheets clear error: ${errorData.error.message}`);
         }
@@ -92,39 +88,26 @@ async function clearGoogleSheet(token, spreadsheetId) {
     return response.json();
 }
 
-// Appends the data to the specified Google Sheet.
-async function appendToGoogleSheet(token, spreadsheetId, values) {
-    const range = 'data!A1';
+async function appendToGoogleSheet(token, spreadsheetId, range, values) {
     const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}:append?valueInputOption=USER_ENTERED`;
-
     const response = await fetch(url, {
         method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            values: values
-        })
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values: values })
     });
-
     if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`Google Sheets API Error: ${errorData.error.message}`);
     }
-
     return response.json();
 }
 
-// Helper functions (unchanged).
 function getAuthToken() {
     return new Promise((resolve, reject) => {
         chrome.identity.getAuthToken({ interactive: true }, (token) => {
             if (chrome.runtime.lastError) {
                 reject(new Error(chrome.runtime.lastError.message));
-            } else {
-                resolve(token);
-            }
+            } else { resolve(token); }
         });
     });
 }
