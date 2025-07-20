@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Event Spotlight Page</title>
-    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Fonts for a modern look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -57,13 +54,11 @@
     </div>
 
     <main class="container mx-auto p-4 md:p-8 space-y-12">
-        <!-- Header Section -->
         <header class="text-center">
             <h1 class="text-4xl md:text-5xl font-bold text-gray-800">Event Spotlight</h1>
             <p class="mt-2 text-gray-600 max-w-2xl mx-auto">An overview of upcoming events, highlighting opportunities with the most availability.</p>
         </header>
 
-        <!-- Highlighted Events Section -->
         <section>
             <div class="flex items-center gap-x-2 mb-4">
                 <h2 class="text-2xl font-bold text-gray-700">Urgent & Available: Today & Tomorrow</h2>
@@ -78,14 +73,12 @@
                 </div>
             </div>
             <div id="highlighted-events" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Highlighted event cards will be injected here by JavaScript -->
-            </div>
+                </div>
              <div id="no-highlighted-events" class="hidden text-center p-8 bg-white rounded-lg shadow-md">
                 <p class="text-gray-500">No high-priority events with many openings for today or tomorrow.</p>
             </div>
         </section>
 
-        <!-- All Events Table Section -->
         <section>
             <h2 class="text-2xl font-bold text-gray-700 mb-4">All Events in the Next 5 Days</h2>
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
@@ -103,11 +96,9 @@
                             </tr>
                         </thead>
                         <tbody id="all-events-table">
-                            <!-- All event rows will be injected here by JavaScript -->
-                        </tbody>
+                            </tbody>
                     </table>
                 </div>
-                <!-- Pagination Controls -->
                 <div id="pagination-controls" class="flex justify-center items-center p-4 space-x-2"></div>
             </div>
         </section>
@@ -120,11 +111,29 @@
             const HIGHLIGHT_OPENINGS_THRESHOLD = 5;
             const HIGHLIGHT_FILL_RATE_THRESHOLD = 0.75;
             const ROWS_PER_PAGE = 10;
-            
+            const PAW_ICON_URL = 'images/paw.png'; // Using local path
+
             let currentPage = 1;
             let paginatedEvents = [];
 
             const loader = document.getElementById('loader');
+
+            // --- HELPER FUNCTION ---
+            /**
+             * Generates a string of HTML img tags for paw icons.
+             * @param {string | number} level The paw level.
+             * @returns {string} The HTML string of paw icons.
+             */
+            function generatePawIcons(level) {
+                const pawLevel = parseInt(level, 10) || 0;
+                // --- THIS IS THE MODIFIED LINE ---
+                if (pawLevel === 0) return '0 Paw';
+                
+                // Creates an array of image tags and joins them into a single string
+                return Array.from({ length: pawLevel }, () => 
+                    `<img src="${PAW_ICON_URL}" alt="Paw icon" class="w-5 h-5 inline-block mx-px">`
+                ).join('');
+            }
 
             // --- DATA FETCHING & PARSING ---
             function getCsvUrl(sheetUrl) {
@@ -214,6 +223,8 @@
                 renderPagination(paginatedEvents, page);
             }
 
+
+
             function renderHighlightedEvents(events, today) {
                 const highlightedContainer = document.getElementById('highlighted-events');
                 const noEventsMessage = document.getElementById('no-highlighted-events');
@@ -237,6 +248,9 @@
                         <h4 class="font-bold text-lg text-gray-800">${event.activity}</h4>
                         <p class="text-sm text-gray-500">${event.eventDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                         <p class="text-sm text-gray-500">${event.time}</p>
+                        <div class="mt-2" title="Paw Level: ${event.pawlevel}">
+                            ${generatePawIcons(event.pawlevel)}
+                        </div>
                         <div class="mt-3">
                             <span class="inline-block bg-green-100 text-green-800 text-sm font-semibold mr-2 px-2.5 py-0.5 rounded">
                                 ${event.openShifts} of ${event.totalShifts} Open
@@ -261,11 +275,14 @@
                         <th scope="row" class="px-6 py-4 font-medium text-gray-900 whitespace-nowrap">${event.activity}</th>
                         <td class="px-6 py-4">${event.eventDate.toLocaleDateString()}</td>
                         <td class="px-6 py-4 whitespace-nowrap">${event.time}</td>
-                        <td class="px-6 py-4">${event.pawlevel} Paw</td>
+                        <td class="px-6 py-4">
+                            ${generatePawIcons(event.pawlevel)}
+                        </td>
                         <td class="px-6 py-4">
                              <span class="font-semibold ${event.openShifts > 0 ? 'text-green-600' : 'text-red-600'}">
                                 ${event.openShifts} / ${event.totalShifts}
                             </span>
+                        </td>
                          <td class="px-6 py-4">
                             <a href="${event.details}" target="_blank" rel="noopener noreferrer" class="font-medium text-indigo-600 hover:underline">Details</a>
                         </td>
