@@ -61,13 +61,13 @@
 
         <section>
             <div class="flex items-center gap-x-2 mb-4">
-                <h2 class="text-2xl font-bold text-gray-700">Urgent & Available: Today & Tomorrow</h2>
+                <h2 class="text-2xl font-bold text-gray-700">Urgent & Available: Next 7 Days</h2>
                 <div id="info-tooltip-container" class="relative">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-500 cursor-pointer hover:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div id="info-tooltip" class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 p-3 bg-gray-800 text-white text-sm rounded-lg shadow-lg opacity-0 pointer-events-none transition-opacity duration-300 z-10">
-                        Highlights events for today and tomorrow that have 5 or more open shifts, OR are less than 75% full.
+                        Highlights events in the next 7 days that are 50% full or less.
                         <div class="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-x-8 border-x-transparent border-t-8 border-t-gray-800"></div>
                     </div>
                 </div>
@@ -80,7 +80,7 @@
         </section>
 
         <section>
-            <h2 class="text-2xl font-bold text-gray-700 mb-4">All Events in the Next 5 Days</h2>
+            <h2 class="text-2xl font-bold text-gray-700 mb-4">All Events this Month</h2>
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left text-gray-500">
@@ -108,8 +108,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             // --- CONFIGURATION ---
             const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing'; // Example public sheet
-            const HIGHLIGHT_OPENINGS_THRESHOLD = 5;
-            const HIGHLIGHT_FILL_RATE_THRESHOLD = 0.75;
             const ROWS_PER_PAGE = 10;
             const PAW_ICON_URL = 'images/paw.png'; // Using local path
 
@@ -126,7 +124,6 @@
              */
             function generatePawIcons(level) {
                 const pawLevel = parseInt(level, 10) || 0;
-                // --- THIS IS THE MODIFIED LINE ---
                 if (pawLevel === 0) return '0 Paw';
                 
                 // Creates an array of image tags and joins them into a single string
@@ -208,10 +205,8 @@
                 });
 
                 renderHighlightedEvents(processedEvents, today);
-
-                const fiveDaysFromNow = new Date(today);
-                fiveDaysFromNow.setDate(today.getDate() + 5);
-                paginatedEvents = processedEvents.filter(e => e.eventDate < fiveDaysFromNow);
+                
+                paginatedEvents = processedEvents; // Use all future events for the table
 
                 displayPage(1); // Display the first page initially
                 loader.classList.add('hidden');
@@ -223,18 +218,17 @@
                 renderPagination(paginatedEvents, page);
             }
 
-
-
             function renderHighlightedEvents(events, today) {
                 const highlightedContainer = document.getElementById('highlighted-events');
                 const noEventsMessage = document.getElementById('no-highlighted-events');
                 
-                const dayAfterTomorrow = new Date(today);
-                dayAfterTomorrow.setDate(today.getDate() + 2);
+                // --- LOGIC MODIFIED HERE ---
+                const sevenDaysFromNow = new Date(today);
+                sevenDaysFromNow.setDate(today.getDate() + 7);
 
                 const highlighted = events.filter(e => 
-                    e.eventDate < dayAfterTomorrow &&
-                    (e.openShifts >= HIGHLIGHT_OPENINGS_THRESHOLD || (e.totalShifts > 0 && e.fillRate < HIGHLIGHT_FILL_RATE_THRESHOLD))
+                    e.eventDate < sevenDaysFromNow &&
+                    (e.totalShifts > 0 && e.fillRate <= 0.50)
                 );
 
                 if (highlighted.length === 0) {
