@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Volunteer Shift Spotlight | Operation Kindness</title>
+    <title>Volunteer Shift Spotlight</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -239,41 +239,38 @@
                 }).filter(e => e.category);
             }
             
-            function convertTimeTo24Hour(timeString) {
-                if (!timeString) return 0;
-                const time = timeString.match(/(\d+):(\d+)\s*(AM|PM)/i);
-                if (!time) return 0;
-                let hours = parseInt(time[1], 10);
-                const minutes = parseInt(time[2], 10);
-                const ampm = time[3].toUpperCase();
-                if (ampm === 'PM' && hours < 12) hours += 12;
-                if (ampm === 'AM' && hours === 12) hours = 0;
-                return hours * 100 + minutes;
-            }
-
             function processAndRender(events, activeFilters) {
                 if (!events || events.length === 0) {
                     loader.innerHTML = '<p class="text-gray-600">No events found in the sheet.</p>';
                     return;
                 }
 
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
+                const now = new Date(); // Get current date and time
 
                 const allProcessedEvents = events.map(e => {
                     const eventDate = new Date(e.date);
                     const openShifts = parseInt(e.openshifts, 10) || 0;
                     const totalShifts = parseInt(e.totalshifts, 10) || 0;
                     const fillRate = totalShifts > 0 ? (totalShifts - openShifts) / totalShifts : 1;
-                    return { ...e, eventDate, openShifts, totalShifts, fillRate };
-                }).filter(e => e.eventDate >= today && !isNaN(e.eventDate.getTime()) && e.openShifts > 0)
-                  .sort((a, b) => {
-                    const dateComparison = a.eventDate.getTime() - b.eventDate.getTime();
-                    if (dateComparison !== 0) return dateComparison;
-                    return convertTimeTo24Hour(a.time) - convertTimeTo24Hour(b.time);
-                });
 
-                renderHighlightedEvents(allProcessedEvents, today);
+                    let startDateTime = null;
+                    if (e.time) {
+                        const timeMatch = e.time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+                        if (timeMatch) {
+                            let hours = parseInt(timeMatch[1], 10);
+                            const minutes = parseInt(timeMatch[2], 10);
+                            const ampm = timeMatch[3].toUpperCase();
+                            if (ampm === 'PM' && hours < 12) hours += 12;
+                            if (ampm === 'AM' && hours === 12) hours = 0;
+                            startDateTime = new Date(eventDate);
+                            startDateTime.setHours(hours, minutes, 0, 0);
+                        }
+                    }
+                    return { ...e, eventDate, openShifts, totalShifts, fillRate, startDateTime };
+                }).filter(e => e.startDateTime && e.startDateTime >= now && !isNaN(e.startDateTime.getTime()) && e.openShifts > 0)
+                  .sort((a, b) => a.startDateTime - b.startDateTime);
+
+                renderHighlightedEvents(allProcessedEvents, now);
 
                 const filterTooltipContent = document.getElementById('filter-tooltip-content');
                 const filterTooltipContainer = document.getElementById('filter-info-tooltip-container');
@@ -299,15 +296,15 @@
                 renderPagination(paginatedEvents, page);
             }
 
-            function renderHighlightedEvents(events, today) {
+            function renderHighlightedEvents(events, now) {
                 const highlightedContainer = document.getElementById('highlighted-events');
                 const noEventsMessage = document.getElementById('no-highlighted-events');
                 
-                const sevenDaysFromNow = new Date(today);
-                sevenDaysFromNow.setDate(today.getDate() + 7);
+                const sevenDaysFromNow = new Date(now);
+                sevenDaysFromNow.setDate(now.getDate() + 7);
 
                 const highlighted = events.filter(e => 
-                    e.eventDate < sevenDaysFromNow &&
+                    e.startDateTime < sevenDaysFromNow &&
                     (e.totalShifts > 0 && e.fillRate <= 0.50)
                 );
 
