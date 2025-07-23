@@ -1,9 +1,20 @@
 // This script is injected into the webpage and has access to the page's DOM and user session.
 
+// Guard to prevent multiple scrapes from running simultaneously
+let scrapeInProgress = false;
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    debugger;
     if (request.action === "startScrape") {
-        console.log("Content script received startScrape message. Starting full scrape with optimized multi-level logic...");
+        // If a scrape is already running, do nothing.
+        if (scrapeInProgress) {
+            console.log("Scrape already in progress. Ignoring new request.");
+            sendResponse({ status: "already running" });
+            return true;
+        }
+
+        scrapeInProgress = true;
+        console.log("Content script received startScrape message. Starting full scrape...");
+        sendResponse({ status: "received" }); // Acknowledge the message
 
         const scrapeAndProcess = async () => {
             try {
@@ -16,7 +27,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const seeAllEventsSelector = 'div.moreShifts a'; // Example selector
                 // --- END CUSTOMIZATION ---
 
-                const dayContainers = document.querySelectorAll(dayContainerSelector);
+                var dayContainers = document.querySelectorAll(dayContainerSelector);
                 if (dayContainers.length === 0) {
                      chrome.runtime.sendMessage({ action: "scrapingError", data: { error: "No day containers found. Check 'dayContainerSelector' in content.js." } });
                     return;
@@ -26,7 +37,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 let finalEventUrls = new Set();
                 let seeAllPagesToFetch = [];
                 
-                //dayContainers = [dayContainers[0]];
+                dayContainers = [dayContainers[3], dayContainers[4]];
                 // Step 1: Iterate through each day container to decide the scraping strategy.
                 dayContainers.forEach(container => {
                     const seeAllLink = container.querySelector(seeAllEventsSelector);
@@ -204,6 +215,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             } catch (error) {
                 console.error("Error in content script:", error);
                 chrome.runtime.sendMessage({ action: "scrapingError", data: { error: `Content script error: ${error.message}` } });
+            } finally {
+                // Reset the guard so a new scrape can be started next time.
+                scrapeInProgress = false;
             }
         };
 

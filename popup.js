@@ -33,15 +33,28 @@ startButton.addEventListener('click', async () => {
     startButton.disabled = true;
     updateStatus('Starting extraction...');
 
+    // Inject the content script
     chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['content.js']
     }, () => {
-        chrome.tabs.sendMessage(tab.id, { 
-            action: "startScrape",
-            spreadsheetId: spreadsheetId
-        });
-        updateStatus('Searching for calendar events on the page...');
+        // After injection, send the message to start scraping.
+        // Add a small delay and error handling to ensure the script is ready.
+        setTimeout(() => {
+            chrome.tabs.sendMessage(tab.id, { 
+                action: "startScrape",
+                spreadsheetId: spreadsheetId
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.error("Error sending message:", chrome.runtime.lastError.message);
+                    updateStatus(`❌ Error: Could not communicate with the page. Please refresh the page and try again.`);
+                    loader.classList.add('hidden');
+                    startButton.disabled = false;
+                } else if (response && response.status === "received") {
+                    updateStatus('Searching for calendar events on the page...');
+                }
+            });
+        }, 100); // 100ms delay to ensure content script is loaded
     });
 });
 
