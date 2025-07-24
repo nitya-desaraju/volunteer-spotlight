@@ -35,23 +35,21 @@ async function uploadToSheet(events, spreadsheetId) {
         let filtersAreValid = true;
 
         if (savedFilters && savedFilters.length > 0) {
-            // Check if every saved filter category still exists in the new data.
             for (const savedCategory of savedFilters) {
                 if (!newCategoriesSet.has(savedCategory)) {
                     filtersAreValid = false;
-                    break; // An outdated filter was found.
+                    break;
                 }
             }
         }
 
         if (!filtersAreValid) {
             updatePopupStatus("Outdated filters found, clearing them...");
-            await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z'); // Clear sheet
-            await chrome.storage.local.remove('savedFilters');          // Clear storage
+            await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z');
+            await chrome.storage.local.remove('savedFilters');
             updatePopupStatus("Filters cleared. Please set new filters if desired.");
         }
 
-        // Finally, send the fresh list of categories to the popup.
         chrome.runtime.sendMessage({ action: "showFilterOptions", data: { categories: newCategories, spreadsheetId: spreadsheetId } });
 
     } catch (error) {
@@ -66,7 +64,7 @@ async function applyFiltersToSheet(categories, spreadsheetId) {
         await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z');
         
         if (categories.length > 0) {
-            const values = categories.map(category => [category]); // Format for sheet API
+            const values = categories.map(category => [category]);
             await appendToGoogleSheet(token, spreadsheetId, 'filter!A1', values);
         }
         
@@ -133,7 +131,7 @@ function getAuthToken() {
 
 function formatForGoogleSheets(detailedEvents) {
     //activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings
-    const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level'];
+    const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level', 'Is Urgent'];
     const rows = detailedEvents.map(event => [
         event.title,
         event.detail,
@@ -142,7 +140,8 @@ function formatForGoogleSheets(detailedEvents) {
         event.openingsAvailable,
         event.totalOpenings,
         event.activityLink,
-        event.pawNumber
+        event.pawNumber,
+        event.isVolunteerDependent
     ]);
     return [header, ...rows];
 }

@@ -19,12 +19,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const scrapeAndProcess = async () => {
             try {
                 // --- CUSTOMIZE THIS SECTION (PART 1: Main Calendar Page) ---
-                // NEW: Selector for the container of each day's events. This is crucial for the new logic.
-                const dayContainerSelector = 'table#SignupFromCalendarTable td'; // Example selector for a day cell
-                // Selector for direct event links within a day container.
+                const dayContainerSelector = 'table#SignupFromCalendarTable td';
                 const directEventSelector = 'ul li a'; 
-                // Selector for "See all events" or "+X more" links within a day container.
-                const seeAllEventsSelector = 'div.moreShifts a'; // Example selector
+                const seeAllEventsSelector = 'div.moreShifts a';
                 // --- END CUSTOMIZATION ---
 
                 var dayContainers = document.querySelectorAll(dayContainerSelector);
@@ -33,19 +30,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     return;
                 }
 
-                // Use a Set to automatically handle duplicate URLs.
                 let finalEventUrls = new Set();
                 let seeAllPagesToFetch = [];
                 
-                dayContainers = [dayContainers[3], dayContainers[4]];
-                // Step 1: Iterate through each day container to decide the scraping strategy.
+                dayContainers = [dayContainers[48]];
                 dayContainers.forEach(container => {
                     const seeAllLink = container.querySelector(seeAllEventsSelector);
                     if (seeAllLink) {
-                        // If a "See All" link exists, we only need to process that page.
                         seeAllPagesToFetch.push(new URL(seeAllLink.href, window.location.origin).href);
                     } else {
-                        // If no "See All" link, gather the direct event links from this day.
                         const directLinks = container.querySelectorAll(directEventSelector);
                         directLinks.forEach(el => {
                             finalEventUrls.add(new URL(el.href, window.location.origin).href);
@@ -55,7 +48,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                 chrome.runtime.sendMessage({ action: "updateStatus", data: `Found ${finalEventUrls.size} direct events and ${seeAllPagesToFetch.length} 'See All' pages...` });
 
-                // Step 2: Fetch and parse the "See All Events" pages to find more event URLs.
                 if (seeAllPagesToFetch.length > 0) {
                     const seeAllPromises = seeAllPagesToFetch.map(async (dayPageUrl) => {
                         try {
@@ -74,8 +66,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             const dayPageDoc = parser.parseFromString(htmlText, 'text/html');
 
                             // --- CUSTOMIZE THIS SECTION (PART 2: "See All" Page) ---
-                            // Selector for the individual event links on the "See All Events" page.
-                            const eventLinkOnDayPageSelector = '.activityShiftLink'; // Example selector
+                            const eventLinkOnDayPageSelector = '.activityShiftLink';
                             // --- END CUSTOMIZATION ---
 
                             const linksOnDayPage = dayPageDoc.querySelectorAll(eventLinkOnDayPageSelector);
@@ -99,17 +90,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                 chrome.runtime.sendMessage({ action: "updateStatus", data: `Found a total of ${uniqueEventUrls.length} unique events. Fetching details sequentially...` });
 
-                // Step 3: Fetch details for every unique event URL sequentially with a random delay.
                 const detailedEvents = [];
-                const delay = ms => new Promise(res => setTimeout(res, ms)); // Helper delay function
+                const delay = ms => new Promise(res => setTimeout(res, ms));
 
                 for (const url of uniqueEventUrls) {
                     try {
-                        // Add a random delay between 5ms and 15ms to be less aggressive
                         const randomDelay = Math.floor(Math.random() * (15 - 5 + 1)) + 5;
                         await delay(randomDelay);
                         
-                        // Provide progress updates to the popup
                         chrome.runtime.sendMessage({ action: "updateStatus", data: `Fetching event ${detailedEvents.length + 1} of ${uniqueEventUrls.length}...` });
 
                         const response = await fetch(url, {
@@ -122,8 +110,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                         if (!response.ok) {
                             console.error(`Fetch Error for ${url}: Status ${response.status}`);
-                            detailedEvents.push({ url, title: 'Fetch Error', date: 'N/A', time: 'N/A', location: 'N/A', description: 'N/A' });
-                            continue; // Move to the next URL
+                            detailedEvents.push({ url, title: 'Fetch Error', isVolunteerDependent: false });
+                            continue;
                         }
 
                         const htmlText = await response.text();
@@ -131,31 +119,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         const doc = parser.parseFromString(htmlText, 'text/html');
 
                         // --- CUSTOMIZE THIS SECTION (PART 3: Final Detail Page) ---
-                        const titleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2'; // Example selector
-                        const detailTitleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2:nth-child(2)'; // Example selector
+                        const titleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2';
+                        const detailTitleSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h2:nth-child(2)';
                         const dateSelector = 'div#SignupFromCalendarSignupToShiftDialogContent h3';
                         const divSelector = 'div#SignupFromCalendarSignupToShiftDialogContent';
-                        
-                        // const timeSelector = '.event-time-class';
-                        // const locationSelector = '.event-location-class';
-                        // const descriptionSelector = '.event-description-class';
                         // --- END CUSTOMIZATION ---
 
-                        const titleNode = doc.querySelector(titleSelector); // ?.innerText.trim() || 'No Title Found';
+                        const titleNode = doc.querySelector(titleSelector);
                         let title = '';
-
-                        // Loop through all the direct children of the h2
                         if (titleNode) {
                             titleNode.childNodes.forEach(node => {
-                            // Find the text nodes (nodeType === 3)
                             if (node.nodeType === 3) {
-                                // Add the text content of the node to our result
                                 title += node.textContent;
                             }
                             });
                         }
-                        
-                        // Use .trim() to remove all the extra whitespace from the beginning and end
                         title = title.trim() || 'No Title Found';
 
                         const detail = doc.querySelector(detailTitleSelector)?.innerText.trim() || 'No Detail Found';
@@ -169,8 +147,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         if (dateMatches && dateMatches.length > 2) {
                             dateString = dateMatches[1].trim();
                             timeString = dateMatches[2].trim();
-                        } else {
-                            console.log(`Could not parse date/time string: "${dateInput}"`);
                         }
 
                         const inputText = doc.querySelector(divSelector)?.innerText.trim() || 'N/A';
@@ -182,8 +158,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         if (openingsMatches) {
                             openingsAvailable = parseInt(openingsMatches[1], 10);
                             totalOpenings = parseInt(openingsMatches[2], 10);
-                        } else {
-                            console.log("Openings pattern not found in the string.");
                         }
 
                         let pawNumber = null;
@@ -193,17 +167,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             pawNumber = parseInt(pawMatch[1], 10);
                         }
                         
+                        // Check for the "Volunteer-Dependent" text
+                        const isVolunteerDependent = inputText.includes("Volunteer-Dependent Activity!");
+
                         const activityLink = doc.querySelector('div#SignupFromCalendarSignupToShiftDialogContent a#GoToActivityPageLink')?.href || 'N/A';
                         
-                        detailedEvents.push({ activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings, pawNumber});
+                        detailedEvents.push({ activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings, pawNumber, isVolunteerDependent });
 
                     } catch (error) {
                         console.error(`Error processing detail page ${url}:`, error);
-                        detailedEvents.push({ url, title: 'Processing Error', date: 'N/A', time: 'N/A', location: 'N/A', description: 'N/A' });
+                        detailedEvents.push({ url, title: 'Processing Error', isVolunteerDependent: false });
                     }
                 }
 
-                // Step 4: Send the final, complete data array to the background script.
                 chrome.runtime.sendMessage({
                     action: "processEvents",
                     data: {
@@ -216,12 +192,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.error("Error in content script:", error);
                 chrome.runtime.sendMessage({ action: "scrapingError", data: { error: `Content script error: ${error.message}` } });
             } finally {
-                // Reset the guard so a new scrape can be started next time.
                 scrapeInProgress = false;
             }
         };
 
         scrapeAndProcess();
-        return true; // Indicate async response.
+        return true;
     }
 });
