@@ -24,16 +24,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 const seeAllEventsSelector = 'div.moreShifts a';
                 // --- END CUSTOMIZATION ---
 
-                var dayContainers = document.querySelectorAll(dayContainerSelector);
+                let dayContainers = Array.from(document.querySelectorAll(dayContainerSelector));
                 if (dayContainers.length === 0) {
                      chrome.runtime.sendMessage({ action: "scrapingError", data: { error: "No day containers found. Check 'dayContainerSelector' in content.js." } });
                     return;
                 }
+                
+                // Filter out empty calendar cells and limit to the next 7 days
+                dayContainers = dayContainers.filter(td => td.querySelector('a')); // Only keep cells with links
+                dayContainers = dayContainers.slice(0, 7);
 
                 let finalEventUrls = new Set();
                 let seeAllPagesToFetch = [];
                 
-                dayContainers = [dayContainers[48]];
                 dayContainers.forEach(container => {
                     const seeAllLink = container.querySelector(seeAllEventsSelector);
                     if (seeAllLink) {
@@ -82,7 +85,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                 const uniqueEventUrls = Array.from(finalEventUrls);
 
-                //uniqueEventUrls = [uniqueEventUrls[0]];
                 if (uniqueEventUrls.length === 0) {
                     chrome.runtime.sendMessage({ action: "scrapingError", data: { error: "No events found after full scan. Check all CSS selectors in content.js." } });
                     return;
@@ -167,7 +169,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             pawNumber = parseInt(pawMatch[1], 10);
                         }
                         
-                        // Check for the "Volunteer-Dependent" text
                         const isVolunteerDependent = inputText.includes("Volunteer-Dependent Activity!");
 
                         const activityLink = doc.querySelector('div#SignupFromCalendarSignupToShiftDialogContent a#GoToActivityPageLink')?.href || 'N/A';
