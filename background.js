@@ -18,7 +18,6 @@ async function uploadToSheet(events, spreadsheetId) {
         const token = await getAuthToken();
         updatePopupStatus("Authentication successful. Updating timestamp...");
 
-        // --- Standard Data Upload ---
         const timestamp = new Date().toLocaleString();
         await updateSheet(token, spreadsheetId, 'meta!A1', [['Last Updated:', timestamp]]);
         updatePopupStatus("Timestamp updated. Clearing old event data...");
@@ -28,7 +27,6 @@ async function uploadToSheet(events, spreadsheetId) {
         await appendToGoogleSheet(token, spreadsheetId, 'data!A1', sheetData);
         chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
 
-        // --- NEW: Filter Validation Logic ---
         const newCategories = [...new Set(events.map(event => event.title))].sort();
         const newCategoriesSet = new Set(newCategories);
         const { savedFilters } = await chrome.storage.local.get('savedFilters');
@@ -131,7 +129,7 @@ function getAuthToken() {
 
 function formatForGoogleSheets(detailedEvents) {
     //activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings
-    const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level', 'Is Urgent'];
+    const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level', 'Is Urgent', 'Animal'];
     const rows = detailedEvents.map(event => [
         event.title,
         event.detail,
@@ -141,7 +139,8 @@ function formatForGoogleSheets(detailedEvents) {
         event.totalOpenings,
         event.activityLink,
         event.pawNumber,
-        event.isVolunteerDependent
+        event.isVolunteerDependent,
+        event.animalSpecificity || ''
     ]);
     return [header, ...rows];
 }

@@ -45,6 +45,9 @@
             color: white;
             border-color: #aa1f36;
         }
+        .paw-level-cell {
+            min-width: 150px; /* Ensures space for paws and animal badge */
+        }
     </style>
 </head>
 <body>
@@ -66,7 +69,7 @@
         <header class="text-center">
             <h1 class="text-4xl md:text-5xl font-bold text-[#333333]">Volunteer Shift Spotlight</h1>
             <div class="my-4">
-                <span class="inline-block bg-gray-200 text-gray-800 text-sm font-semibold px-4 py-1 rounded-full">
+                <span class="inline-block bg-[#aa1f36] text-white text-sm font-semibold px-4 py-1 rounded-full">
                     Next 7 Days
                 </span>
             </div>
@@ -165,12 +168,21 @@
 
             const loader = document.getElementById('loader');
 
-            function generatePawIcons(level) {
+            function generatePawIcons(level, animal) {
                 const pawLevel = parseInt(level, 10) || 0;
                 if (pawLevel === 0) return '0 Paw';
-                return Array.from({ length: pawLevel }, () => 
+                
+                let icons = Array.from({ length: pawLevel }, () => 
                     `<img src="${PAW_ICON_URL}" alt="Paw icon" class="w-5 h-5 inline-block mx-px">`
                 ).join('');
+
+                if (animal === 'Dog') {
+                    icons += `<span class="ml-2 inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full align-middle">Dog</span>`;
+                } else if (animal === 'Cat') {
+                    icons += `<span class="ml-2 inline-block bg-purple-100 text-purple-800 text-xs font-semibold px-2 py-0.5 rounded-full align-middle">Cat</span>`;
+                }
+                
+                return `<div class="flex items-center">${icons}</div>`;
             }
 
             function getCsvUrl(sheetUrl, sheetName) {
@@ -225,11 +237,6 @@
             function parseCSV(text) {
                 const rows = text.split('\n').map(row => row.trim().slice(1, -1).split('","'));
                 if (rows.length > 0 && rows[0][0] === 'Last Updated:') {
-                    const timestamp = rows[0][1];
-                    const subtitle = document.getElementById('last-updated-subtitle');
-                    if (subtitle && timestamp) {
-                        subtitle.textContent = `Last updated: ${timestamp}`;
-                    }
                     rows.shift();
                 }
                 const headers = rows.shift();
@@ -258,7 +265,7 @@
                     const totalShifts = parseInt(e.totalshifts, 10) || 0;
                     const fillRate = totalShifts > 0 ? (totalShifts - openShifts) / totalShifts : 1;
                     const isUrgent = e.isurgent?.toLowerCase() === 'true';
-
+                    
                     let startDateTime = null;
                     if (e.time) {
                         const timeMatch = e.time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
@@ -340,7 +347,7 @@
                                 <a href="${event.details}" target="_blank" rel="noopener noreferrer" class="inline-block text-[#aa1f36] hover:text-[#86192a] font-semibold text-sm">View Details &rarr;</a>
                             </div>
                             <div title="Paw Level: ${event.pawlevel}">
-                                ${generatePawIcons(event.pawlevel)}
+                                ${generatePawIcons(event.pawlevel, event.animal)}
                             </div>
                         </div>
                     </div>
@@ -365,7 +372,7 @@
                         <th scope="row" class="px-6 py-4 font-medium text-[#333333] whitespace-nowrap">${event.activity}</th>
                         <td class="px-6 py-4">${event.eventDate.toLocaleDateString()}</td>
                         <td class="px-6 py-4 whitespace-nowrap">${event.time}</td>
-                        <td class="px-6 py-4">${generatePawIcons(event.pawlevel)}</td>
+                        <td class="px-6 py-4 paw-level-cell">${generatePawIcons(event.pawlevel, event.animal)}</td>
                         <td class="px-6 py-4"><span class="font-semibold ${event.openShifts > 0 ? 'text-green-600' : 'text-red-600'}">${event.openShifts} / ${event.totalShifts}</span></td>
                         <td class="px-6 py-4"><a href="${event.details}" target="_blank" rel="noopener noreferrer" class="font-medium text-[#aa1f36] hover:underline">Details</a></td>
                     </tr>

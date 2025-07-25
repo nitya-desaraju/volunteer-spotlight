@@ -5,7 +5,6 @@ let scrapeInProgress = false;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "startScrape") {
-        // If a scrape is already running, do nothing.
         if (scrapeInProgress) {
             console.log("Scrape already in progress. Ignoring new request.");
             sendResponse({ status: "already running" });
@@ -14,7 +13,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         scrapeInProgress = true;
         console.log("Content script received startScrape message. Starting full scrape...");
-        sendResponse({ status: "received" }); // Acknowledge the message
+        sendResponse({ status: "received" });
 
         const scrapeAndProcess = async () => {
             try {
@@ -30,8 +29,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     return;
                 }
                 
-                // Filter out empty calendar cells and limit to the next 7 days
-                dayContainers = dayContainers.filter(td => td.querySelector('a')); // Only keep cells with links
+                dayContainers = dayContainers.filter(td => td.querySelector('a'));
                 dayContainers = dayContainers.slice(0, 7);
 
                 let finalEventUrls = new Set();
@@ -111,8 +109,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                             });
 
                         if (!response.ok) {
-                            console.error(`Fetch Error for ${url}: Status ${response.status}`);
-                            detailedEvents.push({ url, title: 'Fetch Error', isVolunteerDependent: false });
+                            detailedEvents.push({ url, title: 'Fetch Error', isVolunteerDependent: false, animalSpecificity: null });
                             continue;
                         }
 
@@ -143,8 +140,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         
                         const dateRegex = /^(.+?)\s+(\d{1,2}:\d{2}.*)$/;
                         const dateMatches = dateInput.match(dateRegex);
-                        let dateString = "";
-                        let timeString = "";
+                        let dateString = "", timeString = "";
 
                         if (dateMatches && dateMatches.length > 2) {
                             dateString = dateMatches[1].trim();
@@ -154,8 +150,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         const inputText = doc.querySelector(divSelector)?.innerText.trim() || 'N/A';
                         const openingsRegex = /(\d+)\s+of\s+(\d+)/;
                         const openingsMatches = inputText.match(openingsRegex);
-                        let openingsAvailable;
-                        let totalOpenings;
+                        let openingsAvailable, totalOpenings;
 
                         if (openingsMatches) {
                             openingsAvailable = parseInt(openingsMatches[1], 10);
@@ -163,21 +158,31 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                         }
 
                         let pawNumber = null;
+                        let animalSpecificity = null;
                         const pawRegex = /(\d+)\s*paw/i;
                         const pawMatch = inputText.match(pawRegex);
                         if (pawMatch) {
                             pawNumber = parseInt(pawMatch[1], 10);
+                            // If paw level is 3 or higher, check for animal type on the same line
+                            if (pawNumber >= 3) {
+                                const pawLine = inputText.split('\n').find(line => line.match(pawRegex));
+                                if (pawLine) {
+                                    const hasDog = /dog/i.test(pawLine);
+                                    const hasCat = /cat/i.test(pawLine);
+                                    if (hasDog && !hasCat) animalSpecificity = "Dog";
+                                    else if (hasCat && !hasDog) animalSpecificity = "Cat";
+                                }
+                            }
                         }
                         
                         const isVolunteerDependent = inputText.includes("Volunteer-Dependent Activity!");
-
                         const activityLink = doc.querySelector('div#SignupFromCalendarSignupToShiftDialogContent a#GoToActivityPageLink')?.href || 'N/A';
                         
-                        detailedEvents.push({ activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings, pawNumber, isVolunteerDependent });
+                        detailedEvents.push({ activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings, pawNumber, isVolunteerDependent, animalSpecificity });
 
                     } catch (error) {
                         console.error(`Error processing detail page ${url}:`, error);
-                        detailedEvents.push({ url, title: 'Processing Error', isVolunteerDependent: false });
+                        detailedEvents.push({ url, title: 'Processing Error', isVolunteerDependent: false, animalSpecificity: null });
                     }
                 }
 
