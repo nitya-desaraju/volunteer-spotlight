@@ -1,6 +1,6 @@
 // This script is injected into the webpage and has access to the page's DOM and user session.
 
-// Guard to prevent multiple scrapes from running simultaneously
+// Guard to prevent multiple scrapes from running simultaneously 
 let scrapeInProgress = false;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -159,11 +159,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                         let pawNumber = null;
                         let animalSpecificity = null;
-                        const pawRegex = /(\d+)\s*paw/i;
+                        // This regex is now more specific to avoid false positives.
+                        const pawRegex = /(\d+)\s*paw(?=\s*(?:dog|cat|volunteer)|$)/i;
                         const pawMatch = inputText.match(pawRegex);
                         if (pawMatch) {
                             pawNumber = parseInt(pawMatch[1], 10);
-                            // If paw level is 3 or higher, check for animal type on the same line
                             if (pawNumber >= 3) {
                                 const pawLine = inputText.split('\n').find(line => line.match(pawRegex));
                                 if (pawLine) {
