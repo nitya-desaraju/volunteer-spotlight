@@ -2,32 +2,20 @@
 const startButton = document.getElementById('start-scrape');
 const statusDiv = document.getElementById('status');
 const loader = document.getElementById('loader-container');
-const sheetUrlInput = document.getElementById('sheet-url');
 const filterSection = document.getElementById('filter-section');
 const categoryListDiv = document.getElementById('category-list');
 const applyFiltersButton = document.getElementById('apply-filters');
 
-// When the popup loads, try to load the saved URL from storage.
-document.addEventListener('DOMContentLoaded', async () => {
-    const data = await chrome.storage.local.get('spreadsheetUrl');
-    if (data.spreadsheetUrl) {
-        sheetUrlInput.value = data.spreadsheetUrl;
-    }
-});
+// Manually set your Google Sheet URL here
+const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing';
 
 // Listen for clicks on the start button
 startButton.addEventListener('click', async () => {
     filterSection.classList.add('hidden'); // Hide filters on new scrape
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const sheetUrl = sheetUrlInput.value;
-
-    if (!sheetUrl || !sheetUrl.includes('docs.google.com/spreadsheets/d/')) {
-        updateStatus('Error: Please enter a valid Google Sheet URL.');
-        return;
-    }
-
-    await chrome.storage.local.set({ spreadsheetUrl: sheetUrl });
-    const spreadsheetId = sheetUrl.split('/d/')[1].split('/')[0];
+    
+    // Extract Spreadsheet ID from the hardcoded URL
+    const spreadsheetId = GOOGLE_SHEET_URL.split('/d/')[1].split('/')[0];
 
     loader.classList.remove('hidden');
     startButton.disabled = true;
@@ -39,7 +27,6 @@ startButton.addEventListener('click', async () => {
         files: ['content.js']
     }, () => {
         // After injection, send the message to start scraping.
-        // Add a small delay and error handling to ensure the script is ready.
         setTimeout(() => {
             chrome.tabs.sendMessage(tab.id, { 
                 action: "startScrape",
@@ -54,7 +41,7 @@ startButton.addEventListener('click', async () => {
                     updateStatus('Searching for calendar events on the page...');
                 }
             });
-        }, 100); // 100ms delay to ensure content script is loaded
+        }, 100); 
     });
 });
 
@@ -64,11 +51,9 @@ applyFiltersButton.addEventListener('click', () => {
         selectedCategories.push(checkbox.value);
     });
 
-    // Save the selected filters to local storage
     chrome.storage.local.set({ savedFilters: selectedCategories });
 
-    const sheetUrl = sheetUrlInput.value;
-    const spreadsheetId = sheetUrl.split('/d/')[1].split('/')[0];
+    const spreadsheetId = GOOGLE_SHEET_URL.split('/d/')[1].split('/')[0];
     
     updateStatus('Applying filters to sheet...');
     loader.classList.remove('hidden');
@@ -96,7 +81,6 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         startButton.disabled = false;
         updateStatus(`❌ Error: ${message.data.error}`);
     } else if (message.action === "showFilterOptions") {
-        // Load previously saved filters from storage
         const { savedFilters } = await chrome.storage.local.get('savedFilters');
         const savedFilterSet = new Set(savedFilters || []);
 
@@ -110,7 +94,6 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             checkbox.value = category;
             checkbox.className = 'h-4 w-4 rounded border-gray-300 text-[#aa1f36] focus:ring-[#aa1f36]';
             
-            // Check the box if this category was in the saved set
             if (savedFilterSet.has(category)) {
                 checkbox.checked = true;
             }

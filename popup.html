@@ -31,20 +31,12 @@
     <div class="space-y-4">
         <h1 class="text-xl font-bold text-[#333333]">Calendar to Sheets</h1>
 
-        <div>
-            <label for="sheet-url" class="block text-sm font-medium text-[#333333]">Google Sheet URL</label>
-            <input type="text" id="sheet-url" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-[#aa1f36] focus:border-[#aa1f36] sm:text-sm" placeholder="https://docs.google.com/spreadsheets/d/...">
-            <p class="mt-2 text-xs text-[#454545]">
-                **Important:** Please set your sheet's sharing to "Anyone with the link can view" and share the URL with the extension author to be featured on the spotlight page.
-            </p>
-        </div>
-
         <button id="start-scrape" class="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#aa1f36] hover:bg-[#86192a] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#aa1f36]">
             Start Export
         </button>
 
         <div id="status" class="text-sm text-[#333333] p-3 bg-gray-100 rounded-md min-h-[6rem] overflow-y-auto">
-            Welcome! Enter your Google Sheet URL and click start.
+            Welcome! Click start to export shift data.
         </div>
         <div id="loader-container" class="hidden flex justify-center items-center">
             <div class="loader"></div>
@@ -55,7 +47,7 @@
             <div id="category-list" class="space-y-2 max-h-48 overflow-y-auto p-2 border rounded-md">
                 </div>
             <button id="apply-filters" class="w-full flex justify-center items-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#aa1f36] hover:bg-[#86192a] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#aa1f36]">
-                Apply Filters
+                Apply Filters to Website
             </button>
         </div>
 
