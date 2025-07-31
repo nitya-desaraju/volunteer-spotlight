@@ -1,6 +1,3 @@
-// This script runs in the background and now only handles API calls to Google Sheets.
-
-// Listen for messages from other parts of the extension
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "processEvents") {
         uploadToSheet(request.data.events, request.data.spreadsheetId);
@@ -13,64 +10,58 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 async function uploadToSheet(events, spreadsheetId) {
-    updatePopupStatus(`Received ${events.length} processed events. Authenticating with Google...`);
-    try {
-        const token = await getAuthToken();
-        updatePopupStatus("Authentication successful. Updating timestamp...");
+    //shown in popup
+    showStatus(`Processed ${events.length} shifts. Authenticating with Google...`);
+    const token = await getAuthToken();
+    showStatus("Authentication successful. Updating timestamp...");
+    const timestamp = new Date().toLocaleString();
+    await updateSheet(token, spreadsheetId, 'meta!A1', [['Last Updated:', timestamp]]);
+    showStatus("Timestamp updated. Clearing old shift data...");
+    await clearGoogleSheet(token, spreadsheetId, 'data!A:Z');
+    showStatus("Old data cleared. Writing new data to sheet...");
 
-        const timestamp = new Date().toLocaleString();
-        await updateSheet(token, spreadsheetId, 'meta!A1', [['Last Updated:', timestamp]]);
-        updatePopupStatus("Timestamp updated. Clearing old event data...");
-        await clearGoogleSheet(token, spreadsheetId, 'data!A:Z');
-        updatePopupStatus("Old data cleared. Writing new data to sheet...");
-        const sheetData = formatForGoogleSheets(events);
-        await appendToGoogleSheet(token, spreadsheetId, 'data!A1', sheetData);
-        chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
+    const sheetData = formatForGoogleSheets(events);
+    await appendToGoogleSheet(token, spreadsheetId, 'data!A1', sheetData);
+    chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
 
-        const newCategories = [...new Set(events.map(event => event.title))].sort();
-        const newCategoriesSet = new Set(newCategories);
-        const { savedFilters } = await chrome.storage.local.get('savedFilters');
-        let filtersAreValid = true;
+    const categoriesSet = new Set();
+    for (const e of events) categoriesSet.add(e.title);
+    const newCategories = Array.from(categoriesSet).sort();
+    const newCategoriesSet = new Set(newCategories);
+    const { savedFilters } = await chrome.storage.local.get('savedFilters');
+    let filtersValid = true;
 
-        if (savedFilters && savedFilters.length > 0) {
-            for (const savedCategory of savedFilters) {
-                if (!newCategoriesSet.has(savedCategory)) {
-                    filtersAreValid = false;
-                    break;
-                }
+    //fixing saved filters not erasing from sheets if no longer present in the shifts
+    if (savedFilters && savedFilters.length > 0) {
+        for (const savedCategory of savedFilters) {
+            if (!newCategoriesSet.has(savedCategory)) {
+                filtersValid = false;
+                break;
             }
         }
-
-        if (!filtersAreValid) {
-            updatePopupStatus("Outdated filters found, clearing them...");
-            await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z');
-            await chrome.storage.local.remove('savedFilters');
-            updatePopupStatus("Filters cleared. Please set new filters if desired.");
-        }
-
-        chrome.runtime.sendMessage({ action: "showFilterOptions", data: { categories: newCategories, spreadsheetId: spreadsheetId } });
-
-    } catch (error) {
-        console.error("Background script error:", error);
-        chrome.runtime.sendMessage({ action: "scrapingError", data: { error: error.message } });
     }
+
+    if (!filtersValid) {
+        showStatus("Outdated filters found, clearing them...");
+        await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z');
+        await chrome.storage.local.remove('savedFilters');
+        showStatus("Filters cleared. Please set new filters if desired.");
+    }
+
+    chrome.runtime.sendMessage({ action: "showFilterOptions", data: { categories: newCategories, spreadsheetId: spreadsheetId } });
 }
 
 async function applyFiltersToSheet(categories, spreadsheetId) {
-    try {
-        const token = await getAuthToken();
-        await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z');
-        
-        if (categories.length > 0) {
-            const values = categories.map(category => [category]);
-            await appendToGoogleSheet(token, spreadsheetId, 'filter!A1', values);
-        }
-        
-        chrome.runtime.sendMessage({ action: "filtersApplied" });
-    } catch (error) {
-        console.error("Filter apply error:", error);
-        chrome.runtime.sendMessage({ action: "scrapingError", data: { error: `Failed to apply filters: ${error.message}` } });
+    const token = await getAuthToken();
+    await clearGoogleSheet(token, spreadsheetId, 'filter!A:Z');
+    
+    //if no filters are applied, all categories will show 
+    if (categories.length > 0) {
+        const values = categories.map(category => [category]);
+        await appendToGoogleSheet(token, spreadsheetId, 'filter!A1', values);
     }
+    
+    chrome.runtime.sendMessage({ action: "filtersApplied" });
 }
 
 async function updateSheet(token, spreadsheetId, range, values) {
@@ -80,11 +71,11 @@ async function updateSheet(token, spreadsheetId, range, values) {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: values })
     });
+
     if (!response.ok) {
-        const errorData = await response.json();
-        console.error(`Sheet update error for range ${range}: ${errorData.error.message}`);
-        updatePopupStatus(`Warning: Could not write to ${range}.`);
+        showStatus(`Warning: Could not write to ${range}.`);
     }
+
     return response.json();
 }
 
@@ -94,12 +85,14 @@ async function clearGoogleSheet(token, spreadsheetId, range) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
     });
+
     if (!response.ok) {
         const errorData = await response.json();
         if (errorData.error.code !== 400 && errorData.error.code !== 404) {
            throw new Error(`Google Sheets clear error: ${errorData.error.message}`);
         }
     }
+
     return response.json();
 }
 
@@ -110,10 +103,12 @@ async function appendToGoogleSheet(token, spreadsheetId, range, values) {
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ values: values })
     });
+
     if (!response.ok) {
         const errorData = await response.json();
         throw new Error(`Google Sheets API Error: ${errorData.error.message}`);
     }
+
     return response.json();
 }
 
@@ -128,23 +123,12 @@ function getAuthToken() {
 }
 
 function formatForGoogleSheets(detailedEvents) {
-    //activityLink, title, detail, dateString, timeString, openingsAvailable, totalOpenings
     const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level', 'Is Urgent', 'Animal'];
-    const rows = detailedEvents.map(event => [
-        event.title,
-        event.detail,
-        event.dateString,
-        event.timeString,
-        event.openingsAvailable,
-        event.totalOpenings,
-        event.activityLink,
-        event.pawNumber,
-        event.isVolunteerDependent,
-        event.animalSpecificity || ''
-    ]);
+    const rows = detailedEvents.map(event => [event.title, event.detail, event.dateString, event.timeString, event.openingsAvailable, event.totalOpenings, event.activityLink, event.pawNumber, event.isVolunteerDependent, event.animalSpecificity || '']);
+    
     return [header, ...rows];
 }
 
-function updatePopupStatus(message) {
+function showStatus(message) {
     chrome.runtime.sendMessage({ action: "updateStatus", data: message });
 }

@@ -1,4 +1,3 @@
-// Get references to UI elements
 const startButton = document.getElementById('start-scrape');
 const statusDiv = document.getElementById('status');
 const loader = document.getElementById('loader-container');
@@ -6,39 +5,33 @@ const filterSection = document.getElementById('filter-section');
 const categoryListDiv = document.getElementById('category-list');
 const applyFiltersButton = document.getElementById('apply-filters');
 
-// Manually set your Google Sheet URL here
-const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing';
+const google_sheet_url = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing';
 
-// Listen for clicks on the start button
 startButton.addEventListener('click', async () => {
-    filterSection.classList.add('hidden'); // Hide filters on new scrape
+    filterSection.classList.add('hidden');
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    // Extract Spreadsheet ID from the hardcoded URL
-    const spreadsheetId = GOOGLE_SHEET_URL.split('/d/')[1].split('/')[0];
+    const spreadsheetId = google_sheet_url.split('/d/')[1].split('/')[0];
 
     loader.classList.remove('hidden');
     startButton.disabled = true;
     updateStatus('Starting extraction...');
 
-    // Inject the content script
     chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['content.js']
     }, () => {
-        // After injection, send the message to start scraping.
-        setTimeout(() => {
+        setTimeout(() => { //fixing race condition 
             chrome.tabs.sendMessage(tab.id, { 
                 action: "startScrape",
                 spreadsheetId: spreadsheetId
             }, (response) => {
-                if (chrome.runtime.lastError) {
-                    console.error("Error sending message:", chrome.runtime.lastError.message);
+                if (chrome.runtime.lastError) { //fixing freezing when running on the wrong page
                     updateStatus(`❌ Error: Could not communicate with the page. Please refresh the page and try again.`);
                     loader.classList.add('hidden');
                     startButton.disabled = false;
                 } else if (response && response.status === "received") {
-                    updateStatus('Searching for calendar events on the page...');
+                    updateStatus('Searching for shifts on the page...');
                 }
             });
         }, 100); 
@@ -51,9 +44,9 @@ applyFiltersButton.addEventListener('click', () => {
         selectedCategories.push(checkbox.value);
     });
 
-    chrome.storage.local.set({ savedFilters: selectedCategories });
+    chrome.storage.local.set({ savedFilters: selectedCategories }); //saving filters entered from previous time 
 
-    const spreadsheetId = GOOGLE_SHEET_URL.split('/d/')[1].split('/')[0];
+    const spreadsheetId = google_sheet_url.split('/d/')[1].split('/')[0];
     
     updateStatus('Applying filters to sheet...');
     loader.classList.remove('hidden');
@@ -68,14 +61,13 @@ applyFiltersButton.addEventListener('click', () => {
     });
 });
 
-// Listen for messages from other parts of the extension
 chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     if (message.action === "updateStatus") {
         updateStatus(message.data);
     } else if (message.action === "scrapingComplete") {
         loader.classList.add('hidden');
         startButton.disabled = false;
-        updateStatus(`✅ Success! ${message.data.count} events exported. You can now select categories below to filter the website view.`);
+        updateStatus(`✅ Success! ${message.data.count} shifts exported. You can now select categories below to filter the upcoming shifts.`);
     } else if (message.action === "scrapingError") {
         loader.classList.add('hidden');
         startButton.disabled = false;
@@ -84,7 +76,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
         const { savedFilters } = await chrome.storage.local.get('savedFilters');
         const savedFilterSet = new Set(savedFilters || []);
 
-        categoryListDiv.innerHTML = ''; // Clear old categories
+        categoryListDiv.innerHTML = '';
         message.data.categories.forEach(category => {
             const wrapper = document.createElement('div');
             wrapper.className = 'flex items-center';
@@ -94,6 +86,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
             checkbox.value = category;
             checkbox.className = 'h-4 w-4 rounded border-gray-300 text-[#aa1f36] focus:ring-[#aa1f36]';
             
+            //fixing previous filters not appearing in popup
             if (savedFilterSet.has(category)) {
                 checkbox.checked = true;
             }

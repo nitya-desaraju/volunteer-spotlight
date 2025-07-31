@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Calendar to Google Sheets Exporter",
-  "version": "1.2",
-  "description": "Extracts calendar event data from a webpage, fetches details, and exports to a Google Sheet.",
+  "name": "Volunteer Shift Spotlight",
+  "version": "1.0",
+  "description": "Extracts shift data from a volunteer calendar and exports it to a Google Sheet",
   "permissions": [
     "activeTab",
     "scripting",
