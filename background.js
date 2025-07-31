@@ -1,4 +1,17 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    //authenticating before scraping from the fix in popup
+    if (request.action === "checkAuth") {
+        (async () => {
+            try {
+                await getAuthToken();
+                sendResponse({ status: "success" });
+            } catch (error) {
+                sendResponse({ status: "error", message: error.message });
+            }
+        })();
+        return true;
+    }
+
     if (request.action === "processEvents") {
         uploadToSheet(request.data.events, request.data.spreadsheetId);
         return true; 
@@ -11,9 +24,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 async function uploadToSheet(events, spreadsheetId) {
     //shown in popup
-    showStatus(`Processed ${events.length} shifts. Authenticating with Google...`);
+    showStatus(`Processed ${events.length} shifts. Updating timestamp...`);
     const token = await getAuthToken();
-    showStatus("Authentication successful. Updating timestamp...");
+
     const timestamp = new Date().toLocaleString();
     await updateSheet(token, spreadsheetId, 'meta!A1', [['Last Updated:', timestamp]]);
     showStatus("Timestamp updated. Clearing old shift data...");

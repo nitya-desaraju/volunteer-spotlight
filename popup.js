@@ -15,16 +15,34 @@ startButton.addEventListener('click', async () => {
 
     loader.classList.remove('hidden');
     startButton.disabled = true;
-    updateStatus('Starting extraction...');
+    
+    //fixing having to run scraping twice if i need to log in by scraping after logging in
+    updateStatus('Authenticating with Google...');
+    try {
+        const response = await chrome.runtime.sendMessage({ action: "checkAuth" });
+        if (!response || response.status !== 'success') {
+            throw new Error(response.message || "Authentication failed.");
+        }
 
+    } catch (error) {
+        updateStatus(`❌ Error: ${error.message}`);
+        loader.classList.add('hidden');
+        startButton.disabled = false;
+
+        return;
+    }
+
+    updateStatus('Authentication successful. Starting extraction...');
     chrome.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['content.js']
+
     }, () => {
         setTimeout(() => { //fixing race condition 
             chrome.tabs.sendMessage(tab.id, { 
                 action: "startScrape",
                 spreadsheetId: spreadsheetId
+
             }, (response) => {
                 if (chrome.runtime.lastError) { //fixing freezing when running on the wrong page
                     updateStatus(`❌ Error: Could not communicate with the page. Please refresh the page and try again.`);
