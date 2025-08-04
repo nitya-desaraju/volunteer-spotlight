@@ -25,7 +25,7 @@ The volunteer website did not have an API, which is why I had to use an extensio
 
 #### Additional Note
 
-I only have a few hours recorded on hackatime because I started this project before I joined Athena.
+I only have a few hours recorded on hackatime because I started this project before I joined Athena. In total, I spent about 40 hours.
 
 #### AI Usage
 
