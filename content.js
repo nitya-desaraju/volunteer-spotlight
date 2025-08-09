@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     }
                 });
 
-                chrome.runtime.sendMessage({ action: "updateStatus", data: `Found ${finalEventUrls.size} direct events and ${seeAllPages.length} 'See All' pages...` });
+                chrome.runtime.sendMessage({ action: "updateStatus", data: `Found ${seeAllPages.length} 'See All' pages...` });
 
                 if (seeAllPages.length > 0) {
                     const seeAllPromises = seeAllPages.map(async (dayPageUrl) => {
@@ -147,7 +147,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                     let pawNumber = null;
                     let animalSpecificity = null; //for higher paw levels that are animal specific
-                    const pawRegex = /(\d+)\s*paw(?=\s*(?:dog|cat|volunteer)|$)/i; //prevents it from catching other mentions of paw
+                    const pawRegex = /(\d+)\s*paw(?=\s*(?:dog|cat|volunteer|no)|$)/i; //prevents it from catching other mentions of paw
                     const pawMatch = inputText.match(pawRegex);
 
                     if (pawMatch) {
