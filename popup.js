@@ -5,19 +5,15 @@ const filterSection = document.getElementById('filter-section');
 const categoryListDiv = document.getElementById('category-list');
 const applyFiltersButton = document.getElementById('apply-filters');
 
-const google_sheet_url = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing';
-
 startButton.addEventListener('click', async () => {
     filterSection.classList.add('hidden');
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    const spreadsheetId = google_sheet_url.split('/d/')[1].split('/')[0];
-
     loader.classList.remove('hidden');
     startButton.disabled = true;
     
     //fixing having to run scraping twice if i need to log in by scraping after logging in
-    updateStatus('Authenticating with Google...');
+    updateStatus('Authenticating with Microsoft...');
     try {
         const response = await chrome.runtime.sendMessage({ action: "checkAuth" });
         if (!response || response.status !== 'success') {
@@ -40,9 +36,7 @@ startButton.addEventListener('click', async () => {
     }, () => {
         setTimeout(() => { //fixing race condition 
             chrome.tabs.sendMessage(tab.id, { 
-                action: "startScrape",
-                spreadsheetId: spreadsheetId
-
+                action: "startScrape"
             }, (response) => {
                 if (chrome.runtime.lastError) { //fixing freezing when running on the wrong page
                     updateStatus(`❌ Error: Could not communicate with the page. Please refresh the page and try again.`);
@@ -64,8 +58,6 @@ applyFiltersButton.addEventListener('click', () => {
 
     chrome.storage.local.set({ savedFilters: selectedCategories }); //saving filters entered from previous time 
 
-    const spreadsheetId = google_sheet_url.split('/d/')[1].split('/')[0];
-    
     updateStatus('Applying filters to sheet...');
     loader.classList.remove('hidden');
     applyFiltersButton.disabled = true;
@@ -73,8 +65,7 @@ applyFiltersButton.addEventListener('click', () => {
     chrome.runtime.sendMessage({
         action: "applyFilters",
         data: {
-            selectedCategories: selectedCategories,
-            spreadsheetId: spreadsheetId
+            selectedCategories: selectedCategories
         }
     });
 });

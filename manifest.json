@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Volunteer Shift Spotlight",
+  "name": "Volunteer Shift Spotlight Excel",
   "version": "1.0",
-  "description": "Extracts shift data from a volunteer calendar and exports it to a Google Sheet",
+  "description": "Extracts shift data from a volunteer calendar and exports it to an Excel Sheet on SharePoint",
   "permissions": [
     "activeTab",
     "scripting",
@@ -10,7 +10,9 @@
     "storage"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://graph.microsoft.com/",
+    "https://login.microsoftonline.com/"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -27,12 +29,5 @@
     "16": "images/icon16.png",
     "48": "images/icon48.png",
     "128": "images/icon128.png"
-  },
-  "oauth2": {
-    "client_id": "387344514850-l4s54abbekcjr0eehuqtqbuotdis7f10.apps.googleusercontent.com",
-    "scopes": [
-      "https://www.googleapis.com/auth/spreadsheets"
-    ]
   }
 }
-

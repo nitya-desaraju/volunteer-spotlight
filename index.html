@@ -6,6 +6,7 @@
     <title>Volunteer Shift Spotlight | Operation Kindness</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -42,8 +43,7 @@
             <h1 class="text-4xl md:text-5xl font-bold text-[#333333]">Volunteer Shift Spotlight</h1>
             <div class="my-4">
                 <span class="inline-block bg-[#aa1f36] text-white text-sm font-semibold px-4 py-1 rounded-full">
-                    Next 7 Days <!-- may move it, doesn't look great -->
-                </span>
+                    Next 7 Days </span>
             </div>
             <p id="last-updated-subtitle" class="mt-2 text-[#454545] max-w-2xl mx-auto">Spotlights high-need volunteer shifts</p>
         </header>
@@ -82,8 +82,7 @@
                 </div>
             </div>
             <div class="text-xs text-gray-500 -mt-2 mb-3">
-                <p>&#x2190; Scroll table horizontally to see all details &#x2192;</p> <!-- because the whole table isnt visible on phones -->
-            </div>
+                <p>&#x2190; Scroll table horizontally to see all details &#x2192;</p> </div>
             <div class="bg-white rounded-lg shadow-md overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left text-[#454545]">
@@ -121,7 +120,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const google_sheet_url = 'https://docs.google.com/spreadsheets/d/1icc08wyCcNJ3fCb51yT_xmjKLXbzef7DnznVgplbv-E/edit?usp=sharing';
+            const sharepoint_file_sharing_url = 'https://operationkindness.sharepoint.com/:x:/s/Volunteers/EViO36CTGZxCmVVEWMv8_gIB2qyt8wVI2dqjwASUDhFE8g?rtime=g8vba5Xq3Ug';
             const rows_page = 15;
             const paw_icon = 'images/paw.png';
             const event_sheet = 'data'; //has shifts
@@ -145,60 +144,52 @@
                 return `<div class="flex items-center">${icons}</div>`;
             }
 
-            function getCsvUrl(sheetUrl, sheetName) {
-                const sheetId = sheetUrl.split('/d/')[1].split('/')[0];
-                return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
-            }
-
-            async function fetchAndUpdateTimestamp() {
-                const metaCsvUrl = getCsvUrl(google_sheet_url, metadata_sheet);
-                const response = await fetch(metaCsvUrl);
-
-                if (!response.ok) return;
-                const csvText = await response.text();
-
-                if (csvText) {
-                    const parts = csvText.trim().slice(1, -1).split('","');
-
-                    if (parts.length > 1 && parts[0] === 'Last Updated:') {
-                        document.getElementById('last-updated-subtitle').textContent = `Last updated: ${parts[1]}`;
-                    }
+            function getDirectDownloadUrl(sharingUrl) {
+                if (!sharingUrl || !sharingUrl.startsWith('http')) {
+                    return null;
+                }
+                try {
+                    const url = new URL(sharingUrl);
+                    const base64Url = btoa(sharingUrl).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+                    return `https://${url.hostname}/_layouts/15/download.aspx?u=${base64Url}`;
+                } catch (e) {
+                    console.error("Invalid SharePoint URL provided.");
+                    return null;
                 }
             }
-
-            async function fetchEventData() {
-                const csvUrl = getCsvUrl(google_sheet_url, event_sheet);
-                const response = await fetch(csvUrl);
-
-                if (!response.ok) throw new Error('Network response was not ok.');
-                const csvText = await response.text();
-                
-                return parseCSV(csvText);
-            }
-
-            async function fetchActiveFilters() {
-                const filterCsvUrl = getCsvUrl(google_sheet_url, filters_sheet);
-                const response = await fetch(filterCsvUrl);
-                if (!response.ok) return [];
-                const csvText = await response.text();
-                return csvText.split('\n').filter(row => row.trim() !== '').map(row => row.trim().slice(1, -1));
-            }
             
-            function parseCSV(text) {
-                const rows = text.split('\n').map(row => row.trim().slice(1, -1).split('","'));
-                if (rows.length > 0 && rows[0][0] === 'Last Updated:') { rows.shift(); }
-
-                const headers = rows.shift();
-                return rows.map(row => {
-                    const event = {};
-                    if (headers) {
-                        headers.forEach((header, i) => {
-                            event[header.toLowerCase().replace(/\s+/g, '')] = row[i] || '';
-                        });
+            async function fetchAndParseWorkbook() {
+                const directUrl = getDirectDownloadUrl(sharepoint_file_sharing_url);
+                if (!directUrl) throw new Error('Invalid or missing SharePoint sharing URL. Please update it in index.html.');
+            
+                const response = await fetch(directUrl);
+                if (!response.ok) throw new Error(`Network response was not ok (${response.status})`);
+            
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer);
+            
+                const dataSheet = workbook.Sheets[event_sheet];
+                const events = dataSheet ? XLSX.utils.sheet_to_json(dataSheet).map(row => {
+                    const newRow = {};
+                    for (const key in row) {
+                        newRow[key.toLowerCase().replace(/\s+/g, '')] = row[key];
                     }
-
-                    return event;
-                }).filter(e => e.category);
+                    return newRow;
+                }) : [];
+            
+                let timestamp = '';
+                const metaSheet = workbook.Sheets[metadata_sheet];
+                if (metaSheet) {
+                    const metaArray = XLSX.utils.sheet_to_json(metaSheet, { header: 1 });
+                    if (metaArray.length > 0 && metaArray[0].length > 1 && metaArray[0][0] === 'Last Updated:') {
+                        timestamp = metaArray[0][1];
+                    }
+                }
+            
+                const filterSheet = workbook.Sheets[filters_sheet];
+                const filters = filterSheet ? XLSX.utils.sheet_to_json(filterSheet, { header: 1 }).flat().filter(Boolean) : [];
+            
+                return { events, timestamp, filters };
             }
             
             function processAndRender(events, activeFilters) {
@@ -213,11 +204,11 @@
                     const openShifts = parseInt(e.openshifts, 10) || 0;
                     const totalShifts = parseInt(e.totalshifts, 10) || 0;
                     const fillRate = totalShifts > 0 ? (totalShifts - openShifts) / totalShifts : 1;
-                    const isUrgent = e.isurgent?.toLowerCase() === 'true';
+                    const isUrgent = String(e.isurgent)?.toLowerCase() === 'true';
 
                     let startDateTime = null;
                     if (e.time) {
-                        const timeMatch = e.time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+                        const timeMatch = String(e.time).match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
                         if (timeMatch) {
                             let hours = parseInt(timeMatch[1], 10);
                             const minutes = parseInt(timeMatch[2], 10);
@@ -380,12 +371,14 @@
                 if (event.target === modal) { closeModal(); }
             });
 
-            fetchAndUpdateTimestamp();
-            Promise.all([
-                fetchEventData(),
-                fetchActiveFilters()
-            ]).then(([events, activeFilters]) => {
-                processAndRender(events, activeFilters);
+            fetchAndParseWorkbook().then(({ events, timestamp, filters }) => {
+                if (timestamp) {
+                    document.getElementById('last-updated-subtitle').textContent = `Last updated: ${timestamp}`;
+                }
+                processAndRender(events, filters);
+            }).catch(error => {
+                console.error("Failed to load and process workbook:", error);
+                loader.innerHTML = `<p class="text-red-600 font-semibold p-4">Error loading data from SharePoint. Please check the sharing URL in index.html and ensure the file is accessible.</p>`;
             });
         });
     </script>
