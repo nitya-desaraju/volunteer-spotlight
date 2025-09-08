@@ -1,12 +1,12 @@
 // SharePoint and MS Graph API Configuration
 const MSAL_CONFIG = {
-    clientId: "ebded869-b78e-4bdc-8fe5-d7ba06c0a2c3", // Replace with your Azure AD App Client ID
-    tenantId: "286fdf40-8322-4ac4-b029-c3387afb2971", // or 'common' for multi-tenant apps
+    clientId: "ebded869-b78e-4bdc-8fe5-d7ba06c0a2c3",
+    tenantId: "286fdf40-8322-4ac4-b029-c3387afb2971",
     scopes: ["Files.ReadWrite", "Sites.ReadWrite.All", "offline_access"]
 };
 const SHAREPOINT_CONFIG = {
-    siteUrl: "operationkindness.sharepoint.com/sites/Volunteers", // e.g., "contoso.sharepoint.com:/sites/marketing"
-    filePath: "/Documents/Spotlight Data/Book.xlsx" // e.g., "/Documents/Path/To/Your/File.xlsx"
+    siteUrl: "operationkindness.sharepoint.com/sites/Volunteers",
+    filePath: "/Documents/Spotlight Data/Book.xlsx"
 };
 let driveItemIdCache = null;
 
@@ -132,6 +132,29 @@ async function clearSharePointSheet(token, worksheet, range) {
     await callGraphApi(endpoint, token, 'POST', {});
 }
 
+// --- PKCE Authentication Flow ---
+
+// Helper function to generate a random string for the code verifier.
+function generateCodeVerifier() {
+    const randomBytes = new Uint8Array(32);
+    crypto.getRandomValues(randomBytes);
+    return btoa(String.fromCharCode.apply(null, randomBytes))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+}
+
+// Helper function to create a code challenge from the verifier.
+async function generateCodeChallenge(verifier) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(verifier);
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return btoa(String.fromCharCode.apply(null, new Uint8Array(digest)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+}
+
 function getAuthToken() {
     return new Promise(async (resolve, reject) => {
         const { tokenData } = await chrome.storage.local.get('tokenData');
@@ -146,6 +169,14 @@ function getAuthToken() {
         }
 
         const redirectUri = chrome.identity.getRedirectURL();
+        console.log("My extension's redirect URI is:", redirectUri);
+
+        const codeVerifier = generateCodeVerifier();
+        const codeChallenge = await generateCodeChallenge(codeVerifier);
+        
+        // Store the verifier to use it in the token exchange step.
+        await chrome.storage.local.set({ pkceCodeVerifier: codeVerifier });
+
         const authUrl = `https://login.microsoftonline.com/${MSAL_CONFIG.tenantId}/oauth2/v2.0/authorize?` +
             new URLSearchParams({
                 client_id: MSAL_CONFIG.clientId,
@@ -153,7 +184,9 @@ function getAuthToken() {
                 redirect_uri: redirectUri,
                 response_mode: 'query',
                 scope: MSAL_CONFIG.scopes.join(' '),
-                prompt: 'select_account'
+                prompt: 'select_account',
+                code_challenge: codeChallenge,
+                code_challenge_method: 'S256'
             }).toString();
 
         chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (responseUrl) => {
@@ -173,14 +206,26 @@ function getAuthToken() {
 }
 
 async function redeemCodeForTokens(code, redirectUri) {
+    const { pkceCodeVerifier } = await chrome.storage.local.get('pkceCodeVerifier');
+    if (!pkceCodeVerifier) {
+        throw new Error("PKCE code_verifier not found.");
+    }
+    
     const params = new URLSearchParams({
         client_id: MSAL_CONFIG.clientId,
         scope: MSAL_CONFIG.scopes.join(' '),
         code,
         redirect_uri: redirectUri,
-        grant_type: 'authorization_code'
+        grant_type: 'authorization_code',
+        code_verifier: pkceCodeVerifier // PKCE parameter
     });
-    return await fetchMicrosoftToken(params);
+    
+    const tokenData = await fetchMicrosoftToken(params);
+    
+    // Clean up the stored verifier after use.
+    await chrome.storage.local.remove('pkceCodeVerifier');
+    
+    return tokenData;
 }
 
 async function refreshMicrosoftToken(refreshToken) {
@@ -210,6 +255,8 @@ async function fetchMicrosoftToken(body) {
     return tokenData;
 }
 
+// --- End of Authentication Flow ---
+
 function formatForExcel(detailedEvents) {
     const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level', 'Is Urgent', 'Animal'];
     const rows = detailedEvents.map(event => [event.title, event.detail, event.dateString, event.timeString, event.openingsAvailable, event.totalOpenings, event.activityLink, event.pawNumber, event.isVolunteerDependent, event.animalSpecificity || '']);
@@ -218,5 +265,32 @@ function formatForExcel(detailedEvents) {
 }
 
 function showStatus(message) {
+    console.log("STATUS:", message); // Log status for debugging in the service worker
     chrome.runtime.sendMessage({ action: "updateStatus", data: message });
 }
+
+// This listener creates a stable popup window that doesn't close on focus loss,
+// which is essential for the multi-window authentication flow to work reliably.
+chrome.action.onClicked.addListener((tab) => {
+    const popupUrl = chrome.runtime.getURL('popup.html');
+  
+    // Check if a popup window is already open to avoid creating duplicates.
+    chrome.windows.getAll({ populate: true }, (windows) => {
+        const existingPopup = windows.find((win) => {
+            return win.type === 'popup' && win.tabs[0] && win.tabs[0].url === popupUrl;
+        });
+
+        if (existingPopup) {
+            // If it exists, just focus on it.
+            chrome.windows.update(existingPopup.id, { focused: true });
+        } else {
+            // Otherwise, create a new popup window.
+            chrome.windows.create({
+                url: 'popup.html',
+                type: 'popup',
+                width: 370,
+                height: 480
+            });
+        }
+    });
+});
