@@ -5,10 +5,12 @@ const MSAL_CONFIG = {
     scopes: ["Files.ReadWrite", "Sites.ReadWrite.All", "offline_access"]
 };
 const SHAREPOINT_CONFIG = {
-    siteUrl: "operationkindness.sharepoint.com/sites/Volunteers",
-    filePath: "/Documents/Spotlight Data/Book.xlsx"
+    siteUrl: "operationkindness.sharepoint.com:/sites/Volunteers",
+    filePath: "/Spotlight Data/Book.xlsx"
 };
 let driveItemIdCache = null;
+let driveIdCache = null;
+let siteIdCache = null;
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     //authenticating before scraping from the fix in popup
@@ -40,13 +42,13 @@ async function uploadToSheet(events) {
     const token = await getAuthToken();
 
     const timestamp = new Date().toLocaleString();
-    await updateSharePointSheet(token, 'meta', 'A1', [['Last Updated:', timestamp]]);
+    await updateSharePointSheet(token, 'meta', 'A1:B1', [['Last Updated:', timestamp]]);
     showStatus("Timestamp updated. Clearing old shift data...");
     await clearSharePointSheet(token, 'data', 'A:Z');
     showStatus("Old data cleared. Writing new data to sheet...");
 
     const sheetData = formatForExcel(events);
-    await updateSharePointSheet(token, 'data', 'A1', sheetData);
+    await updateSharePointSheet(token, 'data', 'A:J', sheetData);
     chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
 
     const categoriesSet = new Set();
@@ -106,29 +108,54 @@ async function callGraphApi(endpoint, token, method = 'GET', body = null, conten
     return response.status === 204 ? null : response.json();
 }
 
+// This new function is more reliable because it finds the site's unique ID first.
 async function getDriveItemId(token) {
     if (driveItemIdCache) return driveItemIdCache;
+
     const { siteUrl, filePath } = SHAREPOINT_CONFIG;
-    const encodedPath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-    const endpoint = `/sites/${siteUrl}:/drive/root:${encodedPath}`;
+    
+    // The siteUrl is composed of two parts: the hostname and the server-relative path.
+    const [hostname, sitePath] = siteUrl.split(':/');
+
     try {
-        const item = await callGraphApi(endpoint, token);
+        // Step 1: Get the unique Site ID using the hostname and path. This is a robust way to find the site.
+        const siteInfoEndpoint = `/sites/${hostname}:/${sitePath}`;
+        const siteInfo = await callGraphApi(siteInfoEndpoint, token);
+        siteIdCache = siteInfo.id;
+        
+        if (!siteIdCache) {
+            throw new Error("Could not retrieve the SharePoint Site ID.");
+        }
+
+        // Step 2: Use the Site ID and the file path to get the specific file's ID.
+        const encodedFilePath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+        const fileInfoEndpoint = `/sites/${siteIdCache}/drive/root:${encodedFilePath}`;
+        
+        const item = await callGraphApi(fileInfoEndpoint, token);
+        driveIdCache = item.parentReference.driveId;
+        if (!driveIdCache) {
+            throw new Error("Could not retrieve the SharePoint Drive ID.");
+        }
+
         driveItemIdCache = item.id;
         return driveItemIdCache;
+
     } catch (e) {
-        throw new Error(`Could not find file on SharePoint. Check config in background.js. Error: ${e.message}`);
+        // Provide a more detailed error message to help diagnose the issue.
+        console.error("Full error details:", e);
+        throw new Error(`Could not find the file on SharePoint. Please verify SHAREPOINT_CONFIG in background.js. The API error was: ${e.message}`);
     }
 }
 
 async function updateSharePointSheet(token, worksheet, range, values) {
     const itemId = await getDriveItemId(token);
-    const endpoint = `/me/drive/items/${itemId}/workbook/worksheets/${worksheet}/range(address='${range}')`;
+    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${itemId}/workbook/worksheets/${worksheet}/range(address='${range}')`;
     await callGraphApi(endpoint, token, 'PATCH', { values });
 }
 
 async function clearSharePointSheet(token, worksheet, range) {
     const itemId = await getDriveItemId(token);
-    const endpoint = `/me/drive/items/${itemId}/workbook/worksheets/${worksheet}/range(address='${range}')/clear`;
+    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${itemId}/workbook/worksheets/${worksheet}/range(address='${range}')/clear`;
     await callGraphApi(endpoint, token, 'POST', {});
 }
 
