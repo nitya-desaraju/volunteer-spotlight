@@ -40,16 +40,24 @@ async function uploadToSheet(events) {
     //shown in popup
     showStatus(`Processed ${events.length} shifts. Updating timestamp...`);
     const token = await getAuthToken();
+    const sessionId = await createWorkbookSession(token);
 
-    const timestamp = new Date().toLocaleString();
-    await updateSharePointSheet(token, 'meta', 'A1:B1', [['Last Updated:', timestamp]]);
-    showStatus("Timestamp updated. Clearing old shift data...");
-    await clearSharePointSheet(token, 'data', 'A:Z');
-    showStatus("Old data cleared. Writing new data to sheet...");
+    try {
+        const timestamp = new Date().toLocaleString();
+        await updateSharePointSheet(token, 'meta', 'A1:B1', [['Last Updated:', timestamp]], sessionId);
+        showStatus("Timestamp updated. Clearing old shift data...");
+        await clearSharePointSheet(token, 'data', 'A:Z', sessionId);
+        showStatus("Old data cleared. Writing new data to sheet...");
 
-    const sheetData = formatForExcel(events);
-    await updateSharePointSheet(token, 'data', 'A:J', sheetData);
-    chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
+        const sheetData = formatForExcel(events);
+        // Writing to a specific range is much faster than a full column range like A:J
+        const targetRange = `A1:${String.fromCharCode(65 + sheetData[0].length - 1)}${sheetData.length}`;
+        await updateSharePointSheet(token, 'data', targetRange, sheetData, sessionId);
+        chrome.runtime.sendMessage({ action: "scrapingComplete", data: { count: events.length } });
+
+    } finally {
+        await closeWorkbookSession(token, sessionId);
+    }
 
     const categoriesSet = new Set();
     for (const e of events) categoriesSet.add(e.title);
@@ -70,7 +78,8 @@ async function uploadToSheet(events) {
 
     if (!filtersValid) {
         showStatus("Outdated filters found, clearing them...");
-        await clearSharePointSheet(token, 'filter', 'A:Z');
+        // This requires a separate session as it's outside the main data upload flow
+        await applyFiltersToSheet([]); 
         await chrome.storage.local.remove('savedFilters');
         showStatus("Filters cleared. Please set new filters if desired.");
     }
@@ -80,23 +89,38 @@ async function uploadToSheet(events) {
 
 async function applyFiltersToSheet(categories) {
     const token = await getAuthToken();
-    await clearSharePointSheet(token, 'filter', 'A:Z');
-    
-    //if no filters are applied, all categories will show 
-    if (categories.length > 0) {
-        const values = categories.map(category => [category]);
-        await updateSharePointSheet(token, 'filter', 'A1', values);
+    const sessionId = await createWorkbookSession(token);
+    try {
+        await clearSharePointSheet(token, 'filter', 'A:Z', sessionId);
+        
+        //if no filters are applied, all categories will show 
+        if (categories.length > 0) {
+            const values = categories.map(category => [category]);
+            // **FIX:** Calculate the exact range needed for the filters.
+            const targetRange = `A1:A${categories.length}`;
+            // **FIX:** Use the new targetRange instead of just 'A'.
+            await updateSharePointSheet(token, 'filter', targetRange, values, sessionId);
+        }
+    } finally {
+        await closeWorkbookSession(token, sessionId);
     }
     
     chrome.runtime.sendMessage({ action: "filtersApplied" });
 }
 
-async function callGraphApi(endpoint, token, method = 'GET', body = null, contentType = 'application/json') {
+async function callGraphApi(endpoint, token, method = 'GET', body = null, sessionId = null) {
     const headers = new Headers({ 'Authorization': `Bearer ${token}` });
-    if (body) headers.append('Content-Type', contentType);
+    if (sessionId) {
+        headers.append('workbook-session-id', sessionId);
+    }
+    if (method !== 'GET') {
+        headers.append('Content-Type', 'application/json');
+    }
 
     const options = { method, headers };
-    if (body) options.body = JSON.stringify(body);
+    if (body) {
+        options.body = JSON.stringify(body);
+    }
 
     const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, options);
 
@@ -108,60 +132,56 @@ async function callGraphApi(endpoint, token, method = 'GET', body = null, conten
     return response.status === 204 ? null : response.json();
 }
 
-// This new function is more reliable because it finds the site's unique ID first.
 async function getDriveItemId(token) {
-    if (driveItemIdCache) return driveItemIdCache;
+    if (driveItemIdCache) return;
 
     const { siteUrl, filePath } = SHAREPOINT_CONFIG;
-    
-    // The siteUrl is composed of two parts: the hostname and the server-relative path.
     const [hostname, sitePath] = siteUrl.split(':/');
 
     try {
-        // Step 1: Get the unique Site ID using the hostname and path. This is a robust way to find the site.
         const siteInfoEndpoint = `/sites/${hostname}:/${sitePath}`;
         const siteInfo = await callGraphApi(siteInfoEndpoint, token);
         siteIdCache = siteInfo.id;
         
-        if (!siteIdCache) {
-            throw new Error("Could not retrieve the SharePoint Site ID.");
-        }
-
-        // Step 2: Use the Site ID and the file path to get the specific file's ID.
         const encodedFilePath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
         const fileInfoEndpoint = `/sites/${siteIdCache}/drive/root:${encodedFilePath}`;
         
         const item = await callGraphApi(fileInfoEndpoint, token);
         driveIdCache = item.parentReference.driveId;
-        if (!driveIdCache) {
-            throw new Error("Could not retrieve the SharePoint Drive ID.");
-        }
-
         driveItemIdCache = item.id;
-        return driveItemIdCache;
 
     } catch (e) {
-        // Provide a more detailed error message to help diagnose the issue.
         console.error("Full error details:", e);
         throw new Error(`Could not find the file on SharePoint. Please verify SHAREPOINT_CONFIG in background.js. The API error was: ${e.message}`);
     }
 }
 
-async function updateSharePointSheet(token, worksheet, range, values) {
-    const itemId = await getDriveItemId(token);
-    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${itemId}/workbook/worksheets/${worksheet}/range(address='${range}')`;
-    await callGraphApi(endpoint, token, 'PATCH', { values });
+async function createWorkbookSession(token) {
+    await getDriveItemId(token);
+    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${driveItemIdCache}/workbook/createSession`;
+    const response = await callGraphApi(endpoint, token, 'POST', { persistChanges: true });
+    return response.id;
 }
 
-async function clearSharePointSheet(token, worksheet, range) {
-    const itemId = await getDriveItemId(token);
-    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${itemId}/workbook/worksheets/${worksheet}/range(address='${range}')/clear`;
-    await callGraphApi(endpoint, token, 'POST', {});
+async function closeWorkbookSession(token, sessionId) {
+    await getDriveItemId(token);
+    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${driveItemIdCache}/workbook/closeSession`;
+    await callGraphApi(endpoint, token, 'POST', {}, sessionId);
+}
+
+async function updateSharePointSheet(token, worksheet, range, values, sessionId) {
+    await getDriveItemId(token);
+    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${driveItemIdCache}/workbook/worksheets/${worksheet}/range(address='${range}')`;
+    await callGraphApi(endpoint, token, 'PATCH', { values }, sessionId);
+}
+
+async function clearSharePointSheet(token, worksheet, range, sessionId) {
+    await getDriveItemId(token);
+    const endpoint = `/sites/${siteIdCache}/drives/${driveIdCache}/items/${driveItemIdCache}/workbook/worksheets/${worksheet}/range(address='${range}')/clear`;
+    await callGraphApi(endpoint, token, 'POST', {}, sessionId);
 }
 
 // --- PKCE Authentication Flow ---
-
-// Helper function to generate a random string for the code verifier.
 function generateCodeVerifier() {
     const randomBytes = new Uint8Array(32);
     crypto.getRandomValues(randomBytes);
@@ -171,7 +191,6 @@ function generateCodeVerifier() {
         .replace(/=/g, '');
 }
 
-// Helper function to create a code challenge from the verifier.
 async function generateCodeChallenge(verifier) {
     const encoder = new TextEncoder();
     const data = encoder.encode(verifier);
@@ -201,7 +220,6 @@ function getAuthToken() {
         const codeVerifier = generateCodeVerifier();
         const codeChallenge = await generateCodeChallenge(codeVerifier);
         
-        // Store the verifier to use it in the token exchange step.
         await chrome.storage.local.set({ pkceCodeVerifier: codeVerifier });
 
         const authUrl = `https://login.microsoftonline.com/${MSAL_CONFIG.tenantId}/oauth2/v2.0/authorize?` +
@@ -244,12 +262,11 @@ async function redeemCodeForTokens(code, redirectUri) {
         code,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',
-        code_verifier: pkceCodeVerifier // PKCE parameter
+        code_verifier: pkceCodeVerifier
     });
     
     const tokenData = await fetchMicrosoftToken(params);
     
-    // Clean up the stored verifier after use.
     await chrome.storage.local.remove('pkceCodeVerifier');
     
     return tokenData;
@@ -282,8 +299,6 @@ async function fetchMicrosoftToken(body) {
     return tokenData;
 }
 
-// --- End of Authentication Flow ---
-
 function formatForExcel(detailedEvents) {
     const header = ['Category', 'Activity', 'Date', 'Time', 'Open Shifts', 'Total Shifts', 'Details', 'Paw Level', 'Is Urgent', 'Animal'];
     const rows = detailedEvents.map(event => [event.title, event.detail, event.dateString, event.timeString, event.openingsAvailable, event.totalOpenings, event.activityLink, event.pawNumber, event.isVolunteerDependent, event.animalSpecificity || '']);
@@ -292,26 +307,21 @@ function formatForExcel(detailedEvents) {
 }
 
 function showStatus(message) {
-    console.log("STATUS:", message); // Log status for debugging in the service worker
+    console.log("STATUS:", message); 
     chrome.runtime.sendMessage({ action: "updateStatus", data: message });
 }
 
-// This listener creates a stable popup window that doesn't close on focus loss,
-// which is essential for the multi-window authentication flow to work reliably.
 chrome.action.onClicked.addListener((tab) => {
     const popupUrl = chrome.runtime.getURL('popup.html');
   
-    // Check if a popup window is already open to avoid creating duplicates.
     chrome.windows.getAll({ populate: true }, (windows) => {
         const existingPopup = windows.find((win) => {
             return win.type === 'popup' && win.tabs[0] && win.tabs[0].url === popupUrl;
         });
 
         if (existingPopup) {
-            // If it exists, just focus on it.
             chrome.windows.update(existingPopup.id, { focused: true });
         } else {
-            // Otherwise, create a new popup window.
             chrome.windows.create({
                 url: 'popup.html',
                 type: 'popup',
