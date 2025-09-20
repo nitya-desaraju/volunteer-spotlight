@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Volunteer Shift Spotlight | Operation Kindness</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="tailwind.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -145,19 +145,16 @@
             }
 
             function getDirectDownloadUrl(sharingUrl) {
+                // This adds a query parameter to the end of the URL to force a direct file download
+                // instead of opening the Office Online viewer.
                 if (!sharingUrl || !sharingUrl.startsWith('http')) {
                     return null;
                 }
-                try {
-                    const url = new URL(sharingUrl);
-                    const base64Url = btoa(sharingUrl).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
-                    return `https://${url.hostname}/_layouts/15/download.aspx?u=${base64Url}`;
-                } catch (e) {
-                    console.error("Invalid SharePoint URL provided.");
-                    return null;
-                }
+                const url = new URL(sharingUrl);
+                url.searchParams.set('download', '1');
+                return url.href;
             }
-            
+                        
             async function fetchAndParseWorkbook() {
                 const directUrl = getDirectDownloadUrl(sharepoint_file_sharing_url);
                 if (!directUrl) throw new Error('Invalid or missing SharePoint sharing URL. Please update it in index.html.');
@@ -219,6 +216,7 @@
                             startDateTime.setHours(hours, minutes, 0, 0);
                         }
                     }
+
 
                     return { ...e, eventDate, openShifts, totalShifts, fillRate, startDateTime, isUrgent };
                 }).filter(e => e.startDateTime && e.startDateTime >= now && !isNaN(e.startDateTime.getTime()) && e.openShifts > 0) //removes shifts that have started before current time and shifts that are full
