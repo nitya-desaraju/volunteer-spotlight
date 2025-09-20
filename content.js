@@ -28,7 +28,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
                 let finalEventUrls = new Set();
                 let seeAllPages = [];
-                
+
+                //dayContainers = [dayContainers[7]];
+
                 dayContainers.forEach(container => {
                     const seeAllLink = container.querySelector(seeAllEventsSelector);
 
@@ -72,7 +74,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                     await Promise.all(seeAllPromises);
                 }
 
-                const uniqueEventUrls = Array.from(finalEventUrls);
+                const uniqueEventUrls = Array.from(finalEventUrls); //const
+
+                //uniqueEventUrls = [uniqueEventUrls[0]];
 
                 if (uniqueEventUrls.length === 0) {
                     chrome.runtime.sendMessage({ action: "scrapingError", data: { error: "No events found after full scan. Check all CSS selectors in content.js." } });
